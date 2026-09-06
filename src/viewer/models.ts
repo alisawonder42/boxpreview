@@ -10,6 +10,7 @@ export const FLOOR = 0
 const SCAN_CANDIDATES = [
   './models/BoxModel.fbx',
   './BoxModel.fbx',
+  'BoxModel.fbx',
   'https://cdn.jsdelivr.net/gh/alisawonder42/boxpreview@main/BoxModel.fbx',
 ]
 

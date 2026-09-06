@@ -3,6 +3,8 @@ dist
 .DS_Store
 *.local
 .vite
+public/boot.js
+public/.nojekyll
 tsconfig.tsbuildinfo
 tsconfig.app.tsbuildinfo
 tsconfig.node.tsbuildinfo
