@@ -113,7 +113,7 @@ export function tickTour(tour: TourState, dt: number, camera: THREE.Camera): 'cr
       THREE.MathUtils.lerp(tour.homeNdc.y, point.y, onto),
     )
     place()
-    if (tour.distance >= 1) {
+    if (tour.distance >= 0.98 || (Math.abs(tour.ndc.x) < 0.05 && tour.ndc.y >= 0.54)) {
       tour.ndc.set(0, 0.56)
       place()
       tour.phase = 'hanging'
