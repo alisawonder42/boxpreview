@@ -1,0 +1,191 @@
+import * as THREE from 'three'
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js'
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
+import { createAnimalPrintTexture } from '../textures/animalPrint'
+import { applyMeltMaterial, prepareMeltMesh, type MeltUniforms } from './melt'
+
+export const STAND_TOP = 0.78
+
+const SCAN_CANDIDATES = [
+  './models/box.glb',
+  './models/Box-cleaned.glb',
+  './models/3DModel.glb',
+  './models/scan.glb',
+  './models/box.fbx',
+  './models/3DModel.fbx',
+]
+
+export async function loadScanFromUrl(url: string) {
+  const lower = url.split('?')[0].toLowerCase()
+  if (lower.endsWith('.fbx')) {
+    const loader = new FBXLoader()
+    return loader.loadAsync(url)
+  }
+  const loader = new GLTFLoader()
+  const gltf = await loader.loadAsync(url)
+  return gltf.scene
+}
+
+export async function findBundledScan() {
+  for (const url of SCAN_CANDIDATES) {
+    try {
+      const root = await loadScanFromUrl(url)
+      return { root, url }
+    } catch {
+      // try the next candidate
+    }
+  }
+  return null
+}
+
+export function createStandInBox(uniforms: MeltUniforms) {
+  const group = new THREE.Group()
+  group.name = 'stand-in-box'
+  const { map, bump } = createAnimalPrintTexture()
+
+  const bodyMat = new THREE.MeshPhysicalMaterial({
+    map,
+    bumpMap: bump,
+    bumpScale: 0.55,
+    roughness: 0.46,
+    metalness: 0.03,
+    color: '#f3e6d2',
+  })
+  applyMeltMaterial(bodyMat, uniforms)
+
+  const body = new THREE.Mesh(new RoundedBoxGeometry(1.28, 0.72, 0.86, 8, 0.045), bodyMat)
+  body.position.y = 0.36
+  body.castShadow = true
+  body.receiveShadow = true
+  group.add(body)
+
+  const lid = new THREE.Mesh(new RoundedBoxGeometry(1.32, 0.16, 0.9, 8, 0.04), bodyMat)
+  lid.position.y = 0.8
+  lid.castShadow = true
+  group.add(lid)
+
+  const metal = new THREE.MeshPhysicalMaterial({
+    color: '#b08a4a',
+    metalness: 0.92,
+    roughness: 0.22,
+    envMapIntensity: 1.4,
+  })
+  const clasp = new THREE.Mesh(new RoundedBoxGeometry(0.16, 0.22, 0.05, 3, 0.012), metal)
+  clasp.position.set(0, 0.7, 0.455)
+  clasp.castShadow = true
+  group.add(clasp)
+
+  const footGeo = new THREE.CylinderGeometry(0.045, 0.055, 0.08, 12)
+  for (const [x, z] of [
+    [-0.5, -0.3],
+    [0.5, -0.3],
+    [-0.5, 0.3],
+    [0.5, 0.3],
+  ] as const) {
+    const foot = new THREE.Mesh(footGeo, metal)
+    foot.position.set(x, 0.04, z)
+    foot.castShadow = true
+    group.add(foot)
+  }
+
+  return group
+}
+
+export function createStand() {
+  const group = new THREE.Group()
+  group.name = 'stand'
+
+  const plaster = new THREE.MeshPhysicalMaterial({
+    color: '#ece6da',
+    roughness: 0.82,
+    metalness: 0,
+  })
+  const column = new THREE.Mesh(new RoundedBoxGeometry(0.62, 0.7, 0.62, 3, 0.02), plaster)
+  column.position.y = 0.35
+  column.castShadow = true
+  column.receiveShadow = true
+  group.add(column)
+
+  const plate = new THREE.Mesh(
+    new RoundedBoxGeometry(0.72, 0.045, 0.72, 2, 0.01),
+    new THREE.MeshPhysicalMaterial({
+      color: '#8d7348',
+      metalness: 0.78,
+      roughness: 0.28,
+    }),
+  )
+  plate.position.y = STAND_TOP - 0.02
+  plate.castShadow = true
+  plate.receiveShadow = true
+  group.add(plate)
+
+  return group
+}
+
+export function createGround() {
+  const geo = new THREE.CircleGeometry(6.4, 80)
+  geo.rotateX(-Math.PI / 2)
+  const mat = new THREE.MeshPhysicalMaterial({
+    color: '#f0ebe1',
+    roughness: 0.92,
+    metalness: 0,
+  })
+  const mesh = new THREE.Mesh(geo, mat)
+  mesh.receiveShadow = true
+  mesh.position.y = 0
+  return mesh
+}
+
+export function createPuddle(map: THREE.Texture | null) {
+  const mesh = new THREE.Mesh(
+    new THREE.CircleGeometry(0.55, 64),
+    new THREE.MeshPhysicalMaterial({
+      map: map ?? null,
+      color: map ? '#ffffff' : '#c48a4a',
+      roughness: 0.08,
+      metalness: 0.02,
+      clearcoat: 1,
+      clearcoatRoughness: 0.04,
+      transparent: true,
+      opacity: 0,
+    }),
+  )
+  mesh.rotation.x = -Math.PI / 2
+  mesh.position.y = STAND_TOP + 0.012
+  mesh.receiveShadow = true
+  mesh.visible = false
+  return mesh
+}
+
+export function sitOnStand(object: THREE.Object3D, top = STAND_TOP) {
+  object.updateMatrixWorld(true)
+  const box = new THREE.Box3().setFromObject(object)
+  const size = box.getSize(new THREE.Vector3())
+  const center = box.getCenter(new THREE.Vector3())
+  object.position.x -= center.x
+  object.position.z -= center.z
+  object.position.y -= box.min.y
+  const longest = Math.max(size.x, size.y, size.z)
+  object.scale.multiplyScalar(1.18 / longest)
+  object.updateMatrixWorld(true)
+  const seated = new THREE.Box3().setFromObject(object)
+  object.position.y += top - seated.min.y
+}
+
+export function prepareLoadedScan(root: THREE.Object3D, uniforms: MeltUniforms) {
+  root.traverse((child) => {
+    if (child instanceof THREE.Mesh) prepareMeltMesh(child, uniforms)
+  })
+  sitOnStand(root)
+}
+
+export function firstAlbedo(root: THREE.Object3D) {
+  let map: THREE.Texture | null = null
+  root.traverse((child) => {
+    if (map || !(child instanceof THREE.Mesh)) return
+    const mat = Array.isArray(child.material) ? child.material[0] : child.material
+    if (mat instanceof THREE.MeshStandardMaterial && mat.map) map = mat.map
+  })
+  return map
+}
