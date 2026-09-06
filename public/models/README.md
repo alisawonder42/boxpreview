@@ -1,12 +1,7 @@
 # Scan
 
-Put the cleaned photogrammetry file here as **`box.glb`**.
+The viewer loads **`3DModel.fbx`** and its sidecar texture **`3DModel.fbm/3DModel.jpg`**.
 
-Also accepted:
+Vite copies those from the repo root into this folder when the dev server or build starts.
 
-- `Box-cleaned.glb`
-- `3DModel.glb`
-- `scan.glb`
-- `box.fbx` / `3DModel.fbx`
-
-You can also drag a `.glb` or `.fbx` onto the running page.
+You can also drag a `.fbx` onto the running page.

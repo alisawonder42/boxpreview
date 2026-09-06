@@ -4,7 +4,6 @@ import { defineConfig, type Plugin } from 'vite'
 
 const PUBLISH = [
   ['3DModel.fbx', '3DModel.fbx'],
-  ['Box-cleaned.glb', 'box.glb'],
   ['3DModel.fbm/3DModel.jpg', '3DModel.fbm/3DModel.jpg'],
 ] as const
 

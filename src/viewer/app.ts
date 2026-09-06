@@ -12,7 +12,6 @@ import {
   createStandInBox,
   findBundledScan,
   firstAlbedo,
-  SCAN_SOURCES,
   loadScanFromUrl,
   prepareLoadedScan,
   FLOOR,
@@ -146,20 +145,6 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     uniforms,
     gtao: post.gtao,
     controls,
-    scan: 'GLB',
-    onScan: async (name) => {
-      const source = SCAN_SOURCES.find((item) => item.name === name)
-      if (!source) return
-      try {
-        setSource(`Loading ${source.name}…`)
-        const root = await loadScanFromUrl(source.url)
-        prepareLoadedScan(root, uniforms)
-        replaceSubject(root, `Scan · ${source.name}`)
-      } catch (error) {
-        setSource(`Could not load ${source.name}`)
-        console.error(error)
-      }
-    },
   })
 
   const clock = new THREE.Clock()

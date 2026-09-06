@@ -7,19 +7,9 @@ import { applyMeltMaterial, prepareMeltMesh, type MeltUniforms } from './melt'
 
 export const FLOOR = 0
 
-export const SCAN_SOURCES = [
-  { name: 'GLB', url: './models/box.glb' },
-  { name: 'FBX', url: './models/3DModel.fbx' },
-] as const
-
 const SCAN_CANDIDATES = [
-  './models/box.glb',
-  './models/Box-cleaned.glb',
-  './Box-cleaned.glb',
   './models/3DModel.fbx',
   './3DModel.fbx',
-  '../Box-cleaned.glb',
-  'https://cdn.jsdelivr.net/gh/alisawonder42/boxpreview@main/Box-cleaned.glb',
   'https://cdn.jsdelivr.net/gh/alisawonder42/boxpreview@main/3DModel.fbx',
 ]
 
