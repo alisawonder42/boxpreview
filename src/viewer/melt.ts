@@ -119,20 +119,20 @@ export function applyMeltMaterial(
           float height01 = saturate((world.y - uBoundsMin.y) / span);
           float n = snoise(world * 3.1 + vec3(0.0, uTime * 0.55, 0.0));
           float n2 = snoise(world * 6.4 + 19.0 + uTime * 0.2);
-          float sag = smoothstep(0.0, 0.38, melt);
-          float flatten = smoothstep(0.18, 0.72, melt);
-          float drain = smoothstep(0.52, 1.0, melt);
+          float sag = smoothstep(0.0, 0.32, melt);
+          float flatten = smoothstep(0.14, 0.55, melt);
+          float drain = smoothstep(0.38, 0.92, melt);
           float floorY = uBoundsMin.y;
-          world.y = mix(world.y, floorY + 0.02 + n * 0.03, sag * (0.25 + 0.75 * height01));
-          world.y = mix(world.y, floorY + 0.008 + abs(n) * 0.02, flatten);
+          world.y = mix(world.y, floorY + 0.018 + n * 0.025, sag * (0.2 + 0.8 * height01));
+          world.y = mix(world.y, floorY + 0.01 + abs(n) * 0.016, flatten);
           vec2 from = world.xz - uCenter.xz;
-          world.xz = uCenter.xz + from * mix(1.0, 2.15 + n * 0.35, flatten);
-          world.xz += vec2(n, n2) * flatten * 0.1 * span;
+          world.xz = uCenter.xz + from * mix(1.0, 1.4 + n * 0.18, flatten);
+          world.xz += vec2(n, n2) * flatten * 0.06 * span;
           vec2 away = from;
           float awayLen = length(away);
-          away = awayLen > 0.0001 ? away / awayLen : vec2(0.42, -0.18);
-          world.xz += away * drain * (1.15 + n2 * 0.28);
-          world.y -= drain * (0.16 + 0.4 * awayLen);
+          away = awayLen > 0.0001 ? away / awayLen : vec2(0.55, -0.22);
+          world.xz += away * drain * (2.1 + n2 * 0.35);
+          world.y -= drain * (0.28 + 0.7 * awayLen);
           transformed = (inverse(modelMatrix) * vec4(world, 1.0)).xyz;
         }`,
       )
@@ -154,7 +154,7 @@ export function applyMeltMaterial(
         '#include <color_fragment>',
         `#include <color_fragment>
         diffuseColor.rgb = pow(max(diffuseColor.rgb, vec3(0.0)), vec3(uGamma)) * uLift;
-        diffuseColor.a *= 1.0 - smoothstep(0.58, 0.96, saturate(uMelt));`,
+        diffuseColor.a *= 1.0 - smoothstep(0.46, 0.86, saturate(uMelt));`
       )
   }
 }
@@ -201,12 +201,12 @@ export function setMeltLook(root: THREE.Object3D, melt: number) {
     for (const mat of mats) {
       if (!(mat instanceof THREE.MeshStandardMaterial)) continue
       const baseRough = (mat.userData.originalRoughness as number | undefined) ?? 0.88
-      mat.roughness = THREE.MathUtils.lerp(Math.max(baseRough, 0.88), 0.08, melt)
-      mat.envMapIntensity = THREE.MathUtils.lerp(0, 0.7, melt)
+      mat.roughness = THREE.MathUtils.lerp(Math.max(baseRough, 0.88), 0.14, melt)
+      mat.envMapIntensity = THREE.MathUtils.lerp(0, 0.28, melt)
       mat.metalness = 0
-      mat.transparent = melt > 0.45
-      mat.opacity = 1 - THREE.MathUtils.smoothstep(0.58, 0.96, melt)
-      mat.depthWrite = melt < 0.72
+      mat.transparent = melt > 0.4
+      mat.opacity = 1 - THREE.MathUtils.smoothstep(0.46, 0.86, melt)
+      mat.depthWrite = melt < 0.68
     }
   })
 }

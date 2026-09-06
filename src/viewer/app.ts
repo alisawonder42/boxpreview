@@ -281,13 +281,13 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     drips.update(melt, clock.elapsedTime, origin)
 
     const puddleMat = puddle.material as THREE.MeshPhysicalMaterial
-    const puddleIn = THREE.MathUtils.smoothstep(0.08, 0.62, melt)
-    const puddleOut = 1 - THREE.MathUtils.smoothstep(0.7, 0.98, melt)
+    const puddleIn = THREE.MathUtils.smoothstep(0.08, 0.5, melt)
+    const puddleOut = 1 - THREE.MathUtils.smoothstep(0.52, 0.88, melt)
     puddle.visible = puddleIn * puddleOut > 0.02
-    puddle.scale.setScalar(0.25 + puddleIn * 2.05)
-    puddle.position.x = THREE.MathUtils.lerp(0, 0.55, THREE.MathUtils.smoothstep(0.55, 1, melt))
-    puddle.position.z = THREE.MathUtils.lerp(0, -0.28, THREE.MathUtils.smoothstep(0.55, 1, melt))
-    puddleMat.opacity = THREE.MathUtils.clamp(puddleIn * puddleOut * 0.95, 0, 0.94)
+    puddle.scale.setScalar(0.28 + puddleIn * 1.7)
+    puddle.position.x = THREE.MathUtils.lerp(0, 1.15, THREE.MathUtils.smoothstep(0.4, 0.95, melt))
+    puddle.position.z = THREE.MathUtils.lerp(0, -0.55, THREE.MathUtils.smoothstep(0.4, 0.95, melt))
+    puddleMat.opacity = THREE.MathUtils.clamp(puddleIn * puddleOut * 0.9, 0, 0.9)
 
     if (hint) {
       hint.textContent = melt > 0.12 ? 'Click to return' : 'Drag to turn · Click to unmake'
