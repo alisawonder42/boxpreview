@@ -25,6 +25,10 @@ function publishScan(): Plugin {
 export default defineConfig({
   base: './',
   plugins: [publishScan()],
+  server: {
+    host: true,
+    allowedHosts: true,
+  },
   build: {
     target: 'es2022',
     chunkSizeWarningLimit: 1200,
