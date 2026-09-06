@@ -114,19 +114,26 @@ export function applyMeltMaterial(
         `#include <begin_vertex>
         {
           float melt = saturate(uMelt);
-          vec3 rest = position;
+          vec3 world = (modelMatrix * vec4(position, 1.0)).xyz;
           float span = max(0.0001, uBoundsMax.y - uBoundsMin.y);
-          float height01 = saturate((rest.y - uBoundsMin.y) / span);
-          float n = snoise(rest * 3.4 + vec3(0.0, uTime * 0.32, 0.0));
-          float n2 = snoise(rest * 6.8 + 17.0);
-          float fall = melt * (0.12 + 0.92 * height01) * (1.0 + n * 0.28);
-          transformed = rest;
-          transformed.y -= fall * span * 0.92;
-          float pinch = melt * (0.16 + 0.42 * height01);
-          transformed.xz = mix(transformed.xz, mix(transformed.xz, uCenter.xz, pinch), melt);
-          transformed.xz += vec2(n, n2) * melt * 0.045 * span;
-          float drip = smoothstep(0.42, 0.86, n2) * melt;
-          transformed.y -= drip * span * 0.28;
+          float height01 = saturate((world.y - uBoundsMin.y) / span);
+          float n = snoise(world * 3.1 + vec3(0.0, uTime * 0.55, 0.0));
+          float n2 = snoise(world * 6.4 + 19.0 + uTime * 0.2);
+          float sag = smoothstep(0.0, 0.38, melt);
+          float flatten = smoothstep(0.18, 0.72, melt);
+          float drain = smoothstep(0.52, 1.0, melt);
+          float floorY = uBoundsMin.y;
+          world.y = mix(world.y, floorY + 0.02 + n * 0.03, sag * (0.25 + 0.75 * height01));
+          world.y = mix(world.y, floorY + 0.008 + abs(n) * 0.02, flatten);
+          vec2 from = world.xz - uCenter.xz;
+          world.xz = uCenter.xz + from * mix(1.0, 2.15 + n * 0.35, flatten);
+          world.xz += vec2(n, n2) * flatten * 0.1 * span;
+          vec2 away = from;
+          float awayLen = length(away);
+          away = awayLen > 0.0001 ? away / awayLen : vec2(0.42, -0.18);
+          world.xz += away * drain * (1.15 + n2 * 0.28);
+          world.y -= drain * (0.16 + 0.4 * awayLen);
+          transformed = (inverse(modelMatrix) * vec4(world, 1.0)).xyz;
         }`,
       )
 
@@ -146,8 +153,8 @@ export function applyMeltMaterial(
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
-        // The KIRI albedo is darker than the real box. Lift it toward the photos.
-        diffuseColor.rgb = pow(max(diffuseColor.rgb, vec3(0.0)), vec3(uGamma)) * uLift;`,
+        diffuseColor.rgb = pow(max(diffuseColor.rgb, vec3(0.0)), vec3(uGamma)) * uLift;
+        diffuseColor.a *= 1.0 - smoothstep(0.58, 0.96, saturate(uMelt));`,
       )
   }
 }
@@ -194,9 +201,12 @@ export function setMeltLook(root: THREE.Object3D, melt: number) {
     for (const mat of mats) {
       if (!(mat instanceof THREE.MeshStandardMaterial)) continue
       const baseRough = (mat.userData.originalRoughness as number | undefined) ?? 0.88
-      mat.roughness = THREE.MathUtils.lerp(Math.max(baseRough, 0.88), 0.12, melt)
-      mat.envMapIntensity = THREE.MathUtils.lerp(0, 0.55, melt)
+      mat.roughness = THREE.MathUtils.lerp(Math.max(baseRough, 0.88), 0.08, melt)
+      mat.envMapIntensity = THREE.MathUtils.lerp(0, 0.7, melt)
       mat.metalness = 0
+      mat.transparent = melt > 0.45
+      mat.opacity = 1 - THREE.MathUtils.smoothstep(0.58, 0.96, melt)
+      mat.depthWrite = melt < 0.72
     }
   })
 }

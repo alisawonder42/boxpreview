@@ -20,7 +20,6 @@ import { createDrips } from './drips'
 import { createPost } from './post'
 import { attachDebugMenu } from './debug'
 
-const HOLD_MS = 340
 const MOVE_PX = 7
 
 export async function startViewer(canvas: HTMLCanvasElement) {
@@ -53,7 +52,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
 
   RectAreaLightUniformsLib.init()
 
-  const ambient = new THREE.AmbientLight('#f6efe4', 0)
+  const ambient = new THREE.AmbientLight('#f6efe4', 1.8)
   const hemi = new THREE.HemisphereLight('#fff8ef', '#e8dccb', 0)
   scene.add(ambient, hemi)
 
@@ -152,8 +151,10 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   const clock = new THREE.Clock()
   let melt = 0
   let meltTarget = 0
+  let meltedAway = false
   let holding = false
-  let holdTimer = 0
+  let downOnSubject = false
+  let dragged = false
   let pointer = new THREE.Vector2()
   let down = new THREE.Vector2()
   let hintGone = false
@@ -174,26 +175,39 @@ export async function startViewer(canvas: HTMLCanvasElement) {
 
   canvas.addEventListener('pointerdown', (event) => {
     down.set(event.clientX, event.clientY)
-    holding = hitsSubject(event.clientX, event.clientY)
-    holdTimer = 0
+    downOnSubject = hitsSubject(event.clientX, event.clientY)
+    dragged = false
+    holding = downOnSubject && !meltedAway
     controls.autoRotate = false
     hideHint()
   })
 
   canvas.addEventListener('pointermove', (event) => {
-    if (holding && down.distanceTo(new THREE.Vector2(event.clientX, event.clientY)) > MOVE_PX) {
+    if (down.distanceTo(new THREE.Vector2(event.clientX, event.clientY)) > MOVE_PX) {
+      dragged = true
       holding = false
-      meltTarget = 0
     }
   })
 
-  const endHold = () => {
+  const endPointer = () => {
+    if (!dragged && downOnSubject) {
+      meltedAway = !meltedAway
+      meltTarget = meltedAway ? 1 : 0
+    } else if (!dragged && meltedAway) {
+      meltedAway = false
+      meltTarget = 0
+    }
     holding = false
-    meltTarget = 0
+    downOnSubject = false
   }
-  canvas.addEventListener('pointerup', endHold)
-  canvas.addEventListener('pointercancel', endHold)
-  canvas.addEventListener('pointerleave', endHold)
+  canvas.addEventListener('pointerup', endPointer)
+  canvas.addEventListener('pointercancel', () => {
+    holding = false
+    downOnSubject = false
+  })
+  canvas.addEventListener('pointerleave', () => {
+    holding = false
+  })
 
   window.addEventListener('keydown', (event) => {
     if (event.code === 'Space') {
@@ -203,7 +217,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     }
   })
   window.addEventListener('keyup', (event) => {
-    if (event.code === 'Space') meltTarget = 0
+    if (event.code === 'Space') meltTarget = meltedAway ? 1 : 0
   })
 
   reset?.addEventListener('click', () => {
@@ -211,6 +225,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     controls.target.copy(home.target)
     melt = 0
     meltTarget = 0
+    meltedAway = false
   })
 
   const loadFile = async (file: File) => {
@@ -252,11 +267,9 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   const loop = () => {
     const dt = clock.getDelta()
     uniforms.uTime.value = clock.elapsedTime
-    if (holding) {
-      holdTimer += dt * 1000
-      if (holdTimer > HOLD_MS) meltTarget = 1
-    }
-    melt = THREE.MathUtils.damp(melt, meltTarget, 2.4, dt)
+    if (holding) meltTarget = 1
+    const rate = meltTarget > melt ? 1.55 : 2.6
+    melt = THREE.MathUtils.damp(melt, meltTarget, rate, dt)
     uniforms.uMelt.value = melt
     setMeltLook(subject, melt)
     post.setMeltBloom(melt)
@@ -264,16 +277,20 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     const box = new THREE.Box3().setFromObject(subject)
     const origin = new THREE.Vector3()
     box.getCenter(origin)
-    origin.y = box.min.y + 0.12
+    origin.y = box.min.y + 0.1
     drips.update(melt, clock.elapsedTime, origin)
 
     const puddleMat = puddle.material as THREE.MeshPhysicalMaterial
-    puddle.visible = melt > 0.04
-    puddle.scale.setScalar(0.35 + melt * 1.15)
-    puddleMat.opacity = THREE.MathUtils.clamp(melt * 1.15, 0, 0.92)
+    const puddleIn = THREE.MathUtils.smoothstep(0.08, 0.62, melt)
+    const puddleOut = 1 - THREE.MathUtils.smoothstep(0.7, 0.98, melt)
+    puddle.visible = puddleIn * puddleOut > 0.02
+    puddle.scale.setScalar(0.25 + puddleIn * 2.05)
+    puddle.position.x = THREE.MathUtils.lerp(0, 0.55, THREE.MathUtils.smoothstep(0.55, 1, melt))
+    puddle.position.z = THREE.MathUtils.lerp(0, -0.28, THREE.MathUtils.smoothstep(0.55, 1, melt))
+    puddleMat.opacity = THREE.MathUtils.clamp(puddleIn * puddleOut * 0.95, 0, 0.94)
 
     if (hint) {
-      hint.textContent = melt > 0.08 ? 'Release to gather itself' : 'Drag to turn · Hold to unmake'
+      hint.textContent = melt > 0.12 ? 'Click to return' : 'Drag to turn · Click to unmake'
     }
 
     controls.update()
