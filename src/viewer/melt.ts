@@ -66,23 +66,27 @@ export function createMeltUniforms(): MeltUniforms {
     uCenter: { value: new THREE.Vector3() },
     uBoundsMin: { value: new THREE.Vector3(-0.5, 0, -0.5) },
     uBoundsMax: { value: new THREE.Vector3(0.5, 1, 0.5) },
-    uLift: { value: 0.8 },
-    uGamma: { value: 1.03 },
+    uLift: { value: 1 },
+    uGamma: { value: 1 },
   }
 }
 
-export function applyMeltMaterial(material: THREE.MeshStandardMaterial, uniforms: MeltUniforms) {
+export function applyMeltMaterial(
+  material: THREE.MeshStandardMaterial | THREE.MeshBasicMaterial,
+  uniforms: MeltUniforms,
+) {
   // Photogrammetry albedo already has the capture lighting in it.
-  // Extra gloss / environment makes the scan look like plastic.
-  material.userData.originalRoughness = material.roughness
-  material.userData.originalMetalness = material.metalness
-  material.userData.originalEnv = material.envMapIntensity
-  if (material.map) {
-    material.metalness = 0
-    material.roughness = Math.max(material.roughness, 0.92)
-    material.envMapIntensity = 0
-    material.color.set('#ffffff')
+  if ('roughness' in material) {
+    material.userData.originalRoughness = material.roughness
+    material.userData.originalMetalness = material.metalness
+    material.userData.originalEnv = material.envMapIntensity
+    if (material.map) {
+      material.metalness = 0
+      material.roughness = Math.max(material.roughness, 0.92)
+      material.envMapIntensity = 0
+    }
   }
+  if (material.map) material.color.set('#ffffff')
   material.needsUpdate = true
 
   material.onBeforeCompile = (shader) => {
@@ -158,12 +162,15 @@ function textureFrom(source: THREE.Material) {
 export function prepareMeltMesh(mesh: THREE.Mesh, uniforms: MeltUniforms) {
   const sources = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
   const next = sources.map((source) => {
-    const mat =
-      source instanceof THREE.MeshStandardMaterial
+    const map = textureFrom(source)
+    // KIRI's viewer is the photo texture. Extra PBR lights turn the atlas
+    // into a muddy quilt. Keep the scan unlit; melt still displaces verts.
+    const mat = map
+      ? new THREE.MeshBasicMaterial({ color: '#ffffff', map, toneMapped: true })
+      : source instanceof THREE.MeshStandardMaterial
         ? source.clone()
         : new THREE.MeshStandardMaterial({
             color: '#ffffff',
-            map: textureFrom(source),
             roughness: 0.92,
             metalness: 0,
           })

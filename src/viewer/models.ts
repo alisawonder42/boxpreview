@@ -67,9 +67,13 @@ async function parseScanBuffer(buffer: ArrayBuffer, kind: 'fbx' | 'gltf', base: 
 }
 
 async function ensureFbxTexture(root: THREE.Object3D) {
-  const fallbacks = ['./models/3DModel.fbm/3DModel.jpg', './3DModel.fbm/3DModel.jpg']
-  if (hasReadyMap(root)) return
+  const existing = collectMaps(root)
+  if (existing.length > 0) {
+    await Promise.all(existing.map((map) => waitForTexture(map)))
+    if (hasReadyMap(root)) return
+  }
 
+  const fallbacks = ['./models/3DModel.fbm/3DModel.jpg', './3DModel.fbm/3DModel.jpg']
   let texture: THREE.Texture | null = null
   for (const fallback of fallbacks) {
     try {
@@ -90,6 +94,38 @@ async function ensureFbxTexture(root: THREE.Object3D) {
         mat.map = texture
         mat.needsUpdate = true
       }
+    }
+  })
+}
+
+function collectMaps(root: THREE.Object3D) {
+  const maps: THREE.Texture[] = []
+  root.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return
+    const mats = Array.isArray(child.material) ? child.material : [child.material]
+    for (const mat of mats) {
+      if ('map' in mat && mat.map instanceof THREE.Texture) maps.push(mat.map)
+    }
+  })
+  return maps
+}
+
+function waitForTexture(map: THREE.Texture, ms = 8000) {
+  if (textureImageReady(map)) return Promise.resolve(true)
+  return new Promise<boolean>((resolve) => {
+    const finish = (ok: boolean) => {
+      clearTimeout(timer)
+      resolve(ok)
+    }
+    const timer = setTimeout(() => finish(textureImageReady(map)), ms)
+    const image = map.image as { complete?: boolean; naturalWidth?: number; addEventListener?: Function } | undefined
+    if (image?.complete && image.naturalWidth) {
+      finish(true)
+      return
+    }
+    if (typeof image?.addEventListener === 'function') {
+      image.addEventListener('load', () => finish(true), { once: true })
+      image.addEventListener('error', () => finish(false), { once: true })
     }
   })
 }
@@ -233,10 +269,9 @@ export function sitOnFloor(object: THREE.Object3D, top = FLOOR) {
 }
 
 export function configureScanTexture(map: THREE.Texture, anisotropy = 8) {
-  // FBX UVs are already top-left. TextureLoader defaults to flipY, which
-  // mismatches KIRI. Anisotropy keeps the 4K jpeg sharp at an angle.
+  // Leave flipY alone. FBX/TextureLoader uses true; glTF uses false.
+  // Forcing false on this KIRI atlas samples the wrong islands.
   map.colorSpace = THREE.SRGBColorSpace
-  map.flipY = false
   map.anisotropy = Math.max(map.anisotropy, anisotropy)
   map.generateMipmaps = true
   map.minFilter = THREE.LinearMipmapLinearFilter
