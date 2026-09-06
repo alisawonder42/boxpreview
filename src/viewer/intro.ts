@@ -221,6 +221,7 @@ export function createIntro(options: {
   const look = new THREE.Vector3()
   let chapter: IntroChapter = 'film'
   let t = 0
+  let origin = 0
   let settleT = 0
   let cuedMelt = false
   let cuedTour = false
@@ -302,14 +303,16 @@ export function createIntro(options: {
       if (chapter === 'live') return 'none'
 
       if (chapter === 'film') {
-        t = Math.min(FILM_END, t + dt)
+        if (!origin) origin = performance.now()
+        t = Math.min(FILM_END, (performance.now() - origin) / 1000)
         apply()
         if (t >= FILM_END) chapter = 'hold'
         return 'none'
       }
 
       if (chapter === 'hold') {
-        t += dt
+        if (!origin) origin = performance.now()
+        t = (performance.now() - origin) / 1000
         apply()
         if (t >= FILM_END + HOLD && !cuedMelt) {
           chapter = 'melt'

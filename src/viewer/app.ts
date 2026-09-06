@@ -377,7 +377,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
 
   const loop = () => {
     const rawDt = clock.getDelta()
-    const dt = tour.playing || intro.chapter === 'film' ? Math.min(rawDt, 1 / 24) : rawDt
+    const dt = tour.playing ? Math.min(rawDt, 1 / 24) : rawDt
     uniforms.uTime.value = clock.elapsedTime
     if (holding && !intro.shouldBlockInput() && !sequenceLock && !isTouring(tour)) meltTarget = SPLASH_HOLD
     if (tour.playing && tickTour(tour, dt, camera) === 'done') {
