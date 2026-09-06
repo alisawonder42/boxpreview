@@ -93,12 +93,25 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   const uniforms = createMeltUniforms()
   const anim = createMeltAnim()
   applyMeltAnim(uniforms, anim)
+  const carrier = new THREE.Group()
+  carrier.name = 'tour-carrier'
+  scene.add(carrier)
+
   let subject: THREE.Object3D = createStandInBox(uniforms)
-  scene.add(subject)
+  carrier.add(subject)
   bindMeltBounds(subject, uniforms)
+  const restCenter = uniforms.uCenter.value.clone()
+  const restMin = uniforms.uBoundsMin.value.clone()
+  const restMax = uniforms.uBoundsMax.value.clone()
+  const captureRest = () => {
+    restCenter.copy(uniforms.uCenter.value)
+    restMin.copy(uniforms.uBoundsMin.value)
+    restMax.copy(uniforms.uBoundsMax.value)
+  }
+  captureRest()
 
   let puddle = createPuddle(firstAlbedo(subject))
-  scene.add(puddle)
+  carrier.add(puddle)
 
   const tour = createTour()
 
@@ -108,15 +121,17 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   setSource('Stand-in box — drop your scan to replace it')
 
   const replaceSubject = (next: THREE.Object3D, label: string) => {
-    if (subject.parent) scene.remove(subject)
+    if (subject.parent) subject.parent.remove(subject)
     subject = next
-    scene.add(subject)
+    carrier.add(subject)
     bindMeltBounds(subject, uniforms)
+    captureRest()
     const map = firstAlbedo(subject)
-    scene.remove(puddle)
+    if (puddle.parent) puddle.parent.remove(puddle)
     puddle = createPuddle(map)
-    scene.add(puddle)
+    carrier.add(puddle)
     resetTour(tour)
+    carrier.position.set(0, 0, 0)
     uniforms.uTourOffset.value.set(0, 0, 0)
     setSource(label)
   }
@@ -217,7 +232,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   const startSplashTour = () => {
     if (isTouring(tour) || melt < SPLASH_HOLD * 0.72) return
     anim.scrubbing = false
-    puddleHome.set(puddle.position.x, 0, puddle.position.z)
+    puddle.getWorldPosition(puddleHome)
     beginTour(tour, camera, puddleHome)
     controls.enabled = false
   }
@@ -265,7 +280,11 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     controls.target.copy(home.target)
     anim.scrubbing = false
     resetTour(tour)
+    carrier.position.set(0, 0, 0)
     uniforms.uTourOffset.value.set(0, 0, 0)
+    uniforms.uCenter.value.copy(restCenter)
+    uniforms.uBoundsMin.value.copy(restMin)
+    uniforms.uBoundsMax.value.copy(restMax)
     controls.enabled = true
     melt = 0
     meltTarget = 0
@@ -333,13 +352,17 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     const shown = visualMelt(melt, anim.ease)
     uniforms.uMelt.value = shown
     uniforms.uTourOffset.value.copy(tour.offset)
+    carrier.position.copy(tour.offset)
+    uniforms.uCenter.value.copy(restCenter).add(tour.offset)
+    uniforms.uBoundsMin.value.copy(restMin).add(tour.offset)
+    uniforms.uBoundsMax.value.copy(restMax).add(tour.offset)
     setMeltLook(subject, shown, uniforms)
     const faded = 1 - THREE.MathUtils.smoothstep(anim.fadeStart, anim.fadeEnd, shown)
     const present = faded > 0.04 || isTouring(tour)
     const solid = shown < 0.05 && !isTouring(tour)
     subject.visible = present
-    if (present && !subject.parent) scene.add(subject)
-    if (!present && subject.parent) scene.remove(subject)
+    if (present && !subject.parent) carrier.add(subject)
+    if (!present && subject.parent) subject.parent.remove(subject)
     // Default depth still sees the undeformed scan. Kill the solid-box
     // shadow as soon as the melt starts so it cannot linger.
     direct.castShadow = solid
@@ -354,11 +377,9 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     puddle.visible = present && puddleIn * puddleOut > 0.02
     puddle.castShadow = false
     puddle.scale.setScalar(0.28 + puddleIn * 1.7)
-    puddle.position.x =
-      THREE.MathUtils.lerp(0, 1.15, THREE.MathUtils.smoothstep(anim.drainStart, anim.drainEnd, shown)) + tour.offset.x
-    puddle.position.y = FLOOR + 0.004 + tour.offset.y
-    puddle.position.z =
-      THREE.MathUtils.lerp(0, -0.55, THREE.MathUtils.smoothstep(anim.drainStart, anim.drainEnd, shown)) + tour.offset.z
+    puddle.position.x = THREE.MathUtils.lerp(0, 1.15, THREE.MathUtils.smoothstep(anim.drainStart, anim.drainEnd, shown))
+    puddle.position.y = FLOOR + 0.004
+    puddle.position.z = THREE.MathUtils.lerp(0, -0.55, THREE.MathUtils.smoothstep(anim.drainStart, anim.drainEnd, shown))
     puddleMat.opacity = THREE.MathUtils.clamp(puddleIn * puddleOut * 0.9, 0, 0.9)
 
     if (hint) {
