@@ -45,8 +45,6 @@ export interface ProjectEmbed {
 export interface Project {
   slug: string
   title: string
-  /** If set, the page lives under this parent slug: /projects/{under}/{slug}. */
-  under?: string
   /** Shown under the title on the index and on the project page. */
   type: string
   year?: string
@@ -103,9 +101,8 @@ export const projects: Project[] = [
     ],
   },
   {
-    slug: 'the-box',
-    under: 'flat',
-    title: 'The box',
+    slug: 'box',
+    title: 'Box',
     type: 'Interactive 3D / Photogrammetry',
     kindLabel: 'Interactive 3D / Photogrammetry',
     kind: 'independent',
@@ -216,17 +213,7 @@ export function nextProject(slug: string): Project | undefined {
 }
 
 export function projectPath(slug: string): string {
-  const project = projects.find((entry) => entry.slug === slug)
-  if (project?.under) return `/projects/${project.under}/${project.slug}`
   return `/projects/${slug}`
-}
-
-export function childProjects(slug: string): Project[] {
-  return projects.filter((project) => project.under === slug)
-}
-
-export function topLevelProjects(): Project[] {
-  return projects.filter((project) => !project.under)
 }
 
 export interface Experiment {

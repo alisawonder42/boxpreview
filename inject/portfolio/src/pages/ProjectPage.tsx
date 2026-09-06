@@ -2,7 +2,6 @@ import { Link } from '@/app/Link'
 import { Nav } from '@/components/Nav'
 import {
   nextProject,
-  projectBySlug,
   projectPath,
   type Project,
   type ProjectMedia,
@@ -94,22 +93,18 @@ function Embed({ src, title }: { src: string; title: string }) {
 
 export function ProjectPage({ project }: { project: Project }) {
   const upcoming = nextProject(project.slug)
-  const parent = project.under ? projectBySlug(project.under) : undefined
   const meta = [project.type, project.year].filter(Boolean).join(' · ')
   const hasSpec = Boolean(project.kindLabel || project.credit || project.location)
   const showType = Boolean(
     project.type && (!project.kindLabel || project.type !== project.kindLabel),
   )
-  const back = parent
-    ? { href: projectPath(parent.slug), label: parent.title }
-    : { href: '/#projects', label: 'Projects' }
 
   return (
     <>
       <Nav />
       <main className={styles.page}>
-        <Link className={styles.back} href={back.href}>
-          <span aria-hidden="true">←</span> {back.label}
+        <Link className={styles.back} href="/#projects">
+          <span aria-hidden="true">←</span> Projects
         </Link>
 
         <header className={styles.header}>
