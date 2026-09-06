@@ -16,10 +16,10 @@ export function createPost(
   composer.addPass(new RenderPass(scene, camera))
 
   const gtao = new GTAOPass(scene, camera, size.x, size.y)
-  gtao.blendIntensity = 0.72
+  gtao.blendIntensity = 1
   composer.addPass(gtao)
 
-  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0, 0.55, 0.82)
+  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0, 0.4, 0.9)
   composer.addPass(bloom)
 
   composer.addPass(new SMAAPass())
@@ -35,5 +35,10 @@ export function createPost(
     bloom.strength = melt * 0.28
   }
 
-  return { composer, resize, setMeltBloom }
+  const setMeltOcclusion = (melt: number, ao = 1) => {
+    // GTAO uses an undeformed MeshNormalMaterial, so it would keep a box ghost.
+    gtao.blendIntensity = ao * (1 - THREE.MathUtils.smoothstep(0.06, 0.4, melt))
+  }
+
+  return { composer, resize, setMeltBloom, setMeltOcclusion, gtao }
 }

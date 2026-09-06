@@ -33,6 +33,19 @@ body.embed [data-chrome] {
   display: none;
 }
 
+.lil-gui {
+  --background-color: rgba(244, 241, 234, 0.92);
+  --widget-color: #e7e0d4;
+  --text-color: #1c1914;
+  --title-background-color: rgba(28, 25, 20, 0.08);
+  z-index: 20;
+}
+
+.lil-gui.root {
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+}
+
 #stage {
   display: block;
   width: 100%;

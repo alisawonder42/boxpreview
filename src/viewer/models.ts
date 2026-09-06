@@ -3,28 +3,141 @@ import { FBXLoader } from 'three/addons/loaders/FBXLoader.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import { createAnimalPrintTexture } from '../textures/animalPrint'
-import { applyMeltMaterial, prepareMeltMesh, type MeltUniforms } from './melt'
+import { applyMeltMaterial, meltDepthMaterial, prepareMeltMesh, type MeltUniforms } from './melt'
 
-export const STAND_TOP = 0.78
+export const FLOOR = 0
 
 const SCAN_CANDIDATES = [
-  './models/box.glb',
-  './models/Box-cleaned.glb',
-  './models/3DModel.glb',
-  './models/scan.glb',
-  './models/box.fbx',
-  './models/3DModel.fbx',
+  './models/BoxModel.fbx',
+  './BoxModel.fbx',
+  'https://cdn.jsdelivr.net/gh/alisawonder42/boxpreview@main/BoxModel.fbx',
 ]
 
-export async function loadScanFromUrl(url: string) {
-  const lower = url.split('?')[0].toLowerCase()
-  if (lower.endsWith('.fbx')) {
+function scanKind(url: string, fileName = '') {
+  const name = `${fileName} ${url.split('?')[0]}`.toLowerCase()
+  if (name.includes('.fbx')) return 'fbx'
+  if (name.includes('.glb') || name.includes('.gltf')) return 'gltf'
+  return 'unknown'
+}
+
+function sniffBuffer(buffer: ArrayBuffer) {
+  const head = new TextDecoder().decode(new Uint8Array(buffer, 0, Math.min(24, buffer.byteLength)))
+  if (head.startsWith('Kaydara FBX') || head.includes('FBX')) return 'fbx'
+  return 'gltf'
+}
+
+function textureBaseFor(url: string) {
+  if (url.startsWith('blob:') || url.startsWith('data:')) return './models/'
+  const slash = url.lastIndexOf('/')
+  return slash >= 0 ? url.slice(0, slash + 1) : './models/'
+}
+
+function textureImageReady(map: THREE.Texture | null | undefined) {
+  const image = map?.image as { width?: number; naturalWidth?: number } | undefined
+  return Boolean(image && (image.width || image.naturalWidth))
+}
+
+export async function loadScanFromUrl(url: string, fileName = '') {
+  const kind = scanKind(url, fileName)
+  if (kind === 'unknown') {
+    const buffer = await fetch(url).then((response) => response.arrayBuffer())
+    return parseScanBuffer(buffer, sniffBuffer(buffer), './models/')
+  }
+  if (kind === 'fbx') {
+    const base = textureBaseFor(url)
     const loader = new FBXLoader()
-    return loader.loadAsync(url)
+    loader.setResourcePath(base)
+    const root = await loader.loadAsync(url)
+    await ensureFbxTexture(root)
+    return root
   }
   const loader = new GLTFLoader()
   const gltf = await loader.loadAsync(url)
   return gltf.scene
+}
+
+async function parseScanBuffer(buffer: ArrayBuffer, kind: 'fbx' | 'gltf', base: string) {
+  if (kind === 'fbx') {
+    const root = new FBXLoader().parse(buffer, base)
+    await ensureFbxTexture(root)
+    return root
+  }
+  const gltf = await new GLTFLoader().parseAsync(buffer, base)
+  return gltf.scene
+}
+
+async function ensureFbxTexture(root: THREE.Object3D) {
+  const existing = collectMaps(root)
+  if (existing.length > 0) {
+    await Promise.all(existing.map((map) => waitForTexture(map)))
+    if (hasReadyMap(root)) return
+  }
+
+  const fallbacks = ['./models/3DModel.fbm/3DModel.jpg', './3DModel.fbm/3DModel.jpg']
+  let texture: THREE.Texture | null = null
+  for (const fallback of fallbacks) {
+    try {
+      texture = await new THREE.TextureLoader().loadAsync(fallback)
+      break
+    } catch {
+      // try the next known KIRI sidecar path
+    }
+  }
+  if (!texture) return
+
+  configureScanTexture(texture)
+  root.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return
+    const mats = Array.isArray(child.material) ? child.material : [child.material]
+    for (const mat of mats) {
+      if ('map' in mat && !textureImageReady(mat.map as THREE.Texture | null)) {
+        mat.map = texture
+        mat.needsUpdate = true
+      }
+    }
+  })
+}
+
+function collectMaps(root: THREE.Object3D) {
+  const maps: THREE.Texture[] = []
+  root.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return
+    const mats = Array.isArray(child.material) ? child.material : [child.material]
+    for (const mat of mats) {
+      if ('map' in mat && mat.map instanceof THREE.Texture) maps.push(mat.map)
+    }
+  })
+  return maps
+}
+
+function waitForTexture(map: THREE.Texture, ms = 8000) {
+  if (textureImageReady(map)) return Promise.resolve(true)
+  return new Promise<boolean>((resolve) => {
+    const finish = (ok: boolean) => {
+      clearTimeout(timer)
+      resolve(ok)
+    }
+    const timer = setTimeout(() => finish(textureImageReady(map)), ms)
+    const image = map.image as { complete?: boolean; naturalWidth?: number; addEventListener?: Function } | undefined
+    if (image?.complete && image.naturalWidth) {
+      finish(true)
+      return
+    }
+    if (typeof image?.addEventListener === 'function') {
+      image.addEventListener('load', () => finish(true), { once: true })
+      image.addEventListener('error', () => finish(false), { once: true })
+    }
+  })
+}
+
+function hasReadyMap(root: THREE.Object3D) {
+  let ready = false
+  root.traverse((child) => {
+    if (ready || !(child instanceof THREE.Mesh)) return
+    const mats = Array.isArray(child.material) ? child.material : [child.material]
+    ready = mats.some((mat) => 'map' in mat && textureImageReady(mat.map as THREE.Texture | null))
+  })
+  return ready
 }
 
 export async function findBundledScan() {
@@ -48,11 +161,12 @@ export function createStandInBox(uniforms: MeltUniforms) {
     map,
     bumpMap: bump,
     bumpScale: 0.55,
-    roughness: 0.46,
-    metalness: 0.03,
+    roughness: 0.9,
+    metalness: 0,
     color: '#f3e6d2',
   })
   applyMeltMaterial(bodyMat, uniforms)
+  const depth = meltDepthMaterial(uniforms)
 
   const body = new THREE.Mesh(new RoundedBoxGeometry(1.28, 0.72, 0.86, 8, 0.045), bodyMat)
   body.position.y = 0.36
@@ -71,6 +185,7 @@ export function createStandInBox(uniforms: MeltUniforms) {
     roughness: 0.22,
     envMapIntensity: 1.4,
   })
+  applyMeltMaterial(metal, uniforms)
   const clasp = new THREE.Mesh(new RoundedBoxGeometry(0.16, 0.22, 0.05, 3, 0.012), metal)
   clasp.position.set(0, 0.7, 0.455)
   clasp.castShadow = true
@@ -89,51 +204,24 @@ export function createStandInBox(uniforms: MeltUniforms) {
     group.add(foot)
   }
 
-  return group
-}
-
-export function createStand() {
-  const group = new THREE.Group()
-  group.name = 'stand'
-
-  const plaster = new THREE.MeshPhysicalMaterial({
-    color: '#ece6da',
-    roughness: 0.82,
-    metalness: 0,
+  group.traverse((child) => {
+    if (child instanceof THREE.Mesh) child.customDepthMaterial = depth
   })
-  const column = new THREE.Mesh(new RoundedBoxGeometry(0.62, 0.7, 0.62, 3, 0.02), plaster)
-  column.position.y = 0.35
-  column.castShadow = true
-  column.receiveShadow = true
-  group.add(column)
-
-  const plate = new THREE.Mesh(
-    new RoundedBoxGeometry(0.72, 0.045, 0.72, 2, 0.01),
-    new THREE.MeshPhysicalMaterial({
-      color: '#8d7348',
-      metalness: 0.78,
-      roughness: 0.28,
-    }),
-  )
-  plate.position.y = STAND_TOP - 0.02
-  plate.castShadow = true
-  plate.receiveShadow = true
-  group.add(plate)
 
   return group
 }
 
 export function createGround() {
-  const geo = new THREE.CircleGeometry(6.4, 80)
+  const geo = new THREE.PlaneGeometry(18, 18)
   geo.rotateX(-Math.PI / 2)
   const mat = new THREE.MeshPhysicalMaterial({
-    color: '#f0ebe1',
-    roughness: 0.92,
+    color: '#f6f1e8',
+    roughness: 0.94,
     metalness: 0,
   })
   const mesh = new THREE.Mesh(geo, mat)
   mesh.receiveShadow = true
-  mesh.position.y = 0
+  mesh.position.y = FLOOR
   return mesh
 }
 
@@ -152,32 +240,71 @@ export function createPuddle(map: THREE.Texture | null) {
     }),
   )
   mesh.rotation.x = -Math.PI / 2
-  mesh.position.y = STAND_TOP + 0.012
+  mesh.position.y = FLOOR + 0.004
   mesh.receiveShadow = true
   mesh.visible = false
   return mesh
 }
 
-export function sitOnStand(object: THREE.Object3D, top = STAND_TOP) {
+function meshBounds(object: THREE.Object3D) {
+  const box = new THREE.Box3()
   object.updateMatrixWorld(true)
-  const box = new THREE.Box3().setFromObject(object)
+  object.traverse((child) => {
+    if ((child as THREE.Mesh).isMesh) box.expandByObject(child)
+  })
+  return box
+}
+
+export function sitOnFloor(object: THREE.Object3D, top = FLOOR) {
+  // KIRI FBX files sit far from the origin (cm-scale child + offset mesh).
+  // Scale first, then recenter — scaling after a translate pivots around the
+  // object's origin and throws the box into the fog.
+  const box = meshBounds(object)
+  if (box.isEmpty()) return
   const size = box.getSize(new THREE.Vector3())
-  const center = box.getCenter(new THREE.Vector3())
-  object.position.x -= center.x
-  object.position.z -= center.z
-  object.position.y -= box.min.y
   const longest = Math.max(size.x, size.y, size.z)
+  if (!Number.isFinite(longest) || longest < 1e-5) return
+
   object.scale.multiplyScalar(1.18 / longest)
-  object.updateMatrixWorld(true)
-  const seated = new THREE.Box3().setFromObject(object)
+  const seated = meshBounds(object)
+  if (seated.isEmpty()) return
+  const center = seated.getCenter(new THREE.Vector3())
+  object.position.x += -center.x
+  object.position.z += -center.z
   object.position.y += top - seated.min.y
 }
 
-export function prepareLoadedScan(root: THREE.Object3D, uniforms: MeltUniforms) {
+export function configureScanTexture(map: THREE.Texture, anisotropy = 8) {
+  // Leave flipY alone. FBX/TextureLoader uses true; glTF uses false.
+  // Forcing false on this KIRI atlas samples the wrong islands.
+  map.colorSpace = THREE.SRGBColorSpace
+  map.anisotropy = Math.max(map.anisotropy, anisotropy)
+  map.generateMipmaps = true
+  map.minFilter = THREE.LinearMipmapLinearFilter
+  map.magFilter = THREE.LinearFilter
+  map.needsUpdate = true
+}
+
+export function prepareLoadedScan(
+  root: THREE.Object3D,
+  uniforms: MeltUniforms,
+  anisotropy = 8,
+) {
   root.traverse((child) => {
-    if (child instanceof THREE.Mesh) prepareMeltMesh(child, uniforms)
+    if (!(child instanceof THREE.Mesh)) return
+    child.visible = true
+    // KIRI writes reconstruction normals. Recomputing them on this
+    // non-indexed mesh makes one flat normal per triangle — the "simplified" look.
+    if (!child.geometry.getAttribute('normal')) child.geometry.computeVertexNormals()
+    prepareMeltMesh(child, uniforms)
+    const mats = Array.isArray(child.material) ? child.material : [child.material]
+    for (const mat of mats) {
+      if ('map' in mat && mat.map instanceof THREE.Texture) {
+        configureScanTexture(mat.map, anisotropy)
+      }
+    }
   })
-  sitOnStand(root)
+  sitOnFloor(root)
 }
 
 export function firstAlbedo(root: THREE.Object3D) {
@@ -185,7 +312,7 @@ export function firstAlbedo(root: THREE.Object3D) {
   root.traverse((child) => {
     if (map || !(child instanceof THREE.Mesh)) return
     const mat = Array.isArray(child.material) ? child.material[0] : child.material
-    if (mat instanceof THREE.MeshStandardMaterial && mat.map) map = mat.map
+    if (mat && 'map' in mat && mat.map instanceof THREE.Texture) map = mat.map
   })
   return map
 }

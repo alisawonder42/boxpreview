@@ -19,16 +19,21 @@ Production build: `npm run build`. Preview it with `npm run preview`.
 
 ## Your scan
 
-Drop the cleaned KIRI file at `public/models/box.glb`. Until that file is in the repo, the viewer uses a patterned stand-in and you can drag a `.glb` / `.fbx` onto the page.
+The viewer loads **`BoxModel.fbx`** and its print (`3DModel.fbm/3DModel.jpg`). You can also drag another `.fbx` onto the page.
+
+## Live preview
+
+Temporary Vercel deploy with your `Box-cleaned.glb` scan (claim it to keep it):
+
+- Viewer: https://temporary-rapid-zither-7mxq8tw.vercel.app/
+- Embed (no chrome): https://temporary-rapid-zither-7mxq8tw.vercel.app/?embed=1
+- Claim on your Vercel account: https://vercel.com/claim-deployment?code=ef63fc91-5b6e-4f31-a09b-2a5ed31cf5a8
 
 ## Inject into the portfolio
 
-1. Host this build anywhere (GitHub Pages, Workers, a folder on the same domain).
-2. Embed it:
-
 ```html
 <iframe
-  src="https://your-host/boxpreview/?embed=1"
+  src="https://temporary-rapid-zither-7mxq8tw.vercel.app/?embed=1"
   title="Box preview"
   style="width:100%;height:72vh;border:0;background:#f4f1ea"
   allow="fullscreen"
@@ -36,5 +41,7 @@ Drop the cleaned KIRI file at `public/models/box.glb`. Until that file is in the
 ```
 
 `?embed=1` hides the title chrome so only the object remains.
+
+After you claim the deployment, swap the `src` for the permanent Vercel URL.
 
 Or copy `src/viewer` into the portfolio and mount the canvas there. It is vanilla Three.js — no React.

@@ -1,0 +1,123 @@
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: none;
+}
+
+.item + .item {
+  margin-top: 1px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 2.5rem 1fr auto;
+  align-items: baseline;
+  gap: var(--space-4);
+  padding: var(--space-5, 1.25rem) 0;
+  border-top: 1px solid var(--line);
+  transition: border-color var(--dur) var(--ease-out);
+}
+
+.item:last-child .row {
+  border-bottom: 1px solid var(--line);
+}
+
+.index {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.1em;
+  color: var(--fg-faint);
+  transition: color var(--dur) var(--ease-out);
+}
+
+.body {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: clamp(1.15rem, 1.7vw, 1.5rem);
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+  transition: transform var(--dur) var(--ease-out);
+}
+
+.type {
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  color: var(--fg-muted);
+  transition:
+    transform var(--dur) var(--ease-out),
+    color var(--dur) var(--ease-out);
+}
+
+.arrow {
+  font-size: var(--text-sm);
+  line-height: 1;
+  color: var(--fg-faint);
+  opacity: 0.5;
+  transition:
+    opacity var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-out),
+    color var(--dur) var(--ease-out);
+}
+
+/* Restrained: a small shift and a clearer arrow, nothing that competes. */
+@media (hover: hover) {
+  .row:hover {
+    border-color: var(--line-strong);
+  }
+
+  .row:hover .title,
+  .row:hover .type {
+    transform: translateX(6px);
+  }
+
+  .row:hover .index {
+    color: var(--fg-muted);
+  }
+
+  .row:hover .arrow {
+    opacity: 1;
+    color: var(--fg);
+    transform: translate(2px, -2px);
+  }
+}
+
+.row:focus-visible {
+  outline: 1.5px solid var(--fg);
+  outline-offset: 4px;
+}
+
+.row:focus-visible .arrow {
+  opacity: 1;
+  color: var(--fg);
+}
+
+@media (max-width: 30rem) {
+  .row {
+    grid-template-columns: 2rem 1fr auto;
+    gap: var(--space-3);
+    /* A comfortable touch target for the whole row. */
+    padding: var(--space-5, 1.25rem) 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row,
+  .title,
+  .type,
+  .arrow,
+  .index {
+    transition: none;
+  }
+
+  .row:hover .title,
+  .row:hover .type,
+  .row:hover .arrow {
+    transform: none;
+  }
+}

@@ -6,3 +6,10 @@ dist
 tsconfig.tsbuildinfo
 tsconfig.app.tsbuildinfo
 tsconfig.node.tsbuildinfo
+.vercel
+public/models/box.glb
+public/models/*.glb
+public/models/*.fbx
+public/models/**/*.jpg
+!public/models/README.md
+docs/models/*.glb
