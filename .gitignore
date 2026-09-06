@@ -10,3 +10,4 @@ tsconfig.node.tsbuildinfo
 public/models/box.glb
 public/models/*.glb
 !public/models/README.md
+docs/models/*.glb

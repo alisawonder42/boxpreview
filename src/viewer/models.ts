@@ -10,6 +10,9 @@ export const FLOOR = 0
 const SCAN_CANDIDATES = [
   './models/box.glb',
   './models/Box-cleaned.glb',
+  './Box-cleaned.glb',
+  '../Box-cleaned.glb',
+  'https://cdn.jsdelivr.net/gh/alisawonder42/boxpreview@main/Box-cleaned.glb',
   './models/3DModel.glb',
   './models/scan.glb',
   './models/box.fbx',
