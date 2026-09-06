@@ -8,31 +8,59 @@ import { applyMeltMaterial, prepareMeltMesh, type MeltUniforms } from './melt'
 export const FLOOR = 0
 
 export const SCAN_SOURCES = [
-  { name: 'FBX', url: './models/3DModel.fbx' },
   { name: 'GLB', url: './models/box.glb' },
+  { name: 'FBX', url: './models/3DModel.fbx' },
 ] as const
 
 const SCAN_CANDIDATES = [
-  './models/3DModel.fbx',
-  './3DModel.fbx',
   './models/box.glb',
   './models/Box-cleaned.glb',
   './Box-cleaned.glb',
+  './models/3DModel.fbx',
+  './3DModel.fbx',
   '../Box-cleaned.glb',
-  'https://cdn.jsdelivr.net/gh/alisawonder42/boxpreview@main/3DModel.fbx',
   'https://cdn.jsdelivr.net/gh/alisawonder42/boxpreview@main/Box-cleaned.glb',
-  './models/box.fbx',
+  'https://cdn.jsdelivr.net/gh/alisawonder42/boxpreview@main/3DModel.fbx',
 ]
 
 export async function loadScanFromUrl(url: string) {
   const lower = url.split('?')[0].toLowerCase()
   if (lower.endsWith('.fbx')) {
     const loader = new FBXLoader()
-    return loader.loadAsync(url)
+    const base = url.slice(0, url.lastIndexOf('/') + 1)
+    loader.setResourcePath(base)
+    const root = await loader.loadAsync(url)
+    await ensureFbxTexture(root, base)
+    return root
   }
   const loader = new GLTFLoader()
   const gltf = await loader.loadAsync(url)
   return gltf.scene
+}
+
+async function ensureFbxTexture(root: THREE.Object3D, base: string) {
+  const fallback = `${base}3DModel.fbm/3DModel.jpg`
+  let hasMap = false
+  root.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return
+    const mats = Array.isArray(child.material) ? child.material : [child.material]
+    hasMap ||= mats.some((mat) => 'map' in mat && Boolean(mat.map))
+  })
+  if (hasMap) return
+
+  const texture = await new THREE.TextureLoader().loadAsync(fallback)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.flipY = false
+  root.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return
+    const mats = Array.isArray(child.material) ? child.material : [child.material]
+    for (const mat of mats) {
+      if ('map' in mat) {
+        mat.map = texture
+        mat.needsUpdate = true
+      }
+    }
+  })
 }
 
 export async function findBundledScan() {
@@ -138,21 +166,26 @@ export function createPuddle(map: THREE.Texture | null) {
 export function sitOnFloor(object: THREE.Object3D, top = FLOOR) {
   object.updateMatrixWorld(true)
   const box = new THREE.Box3().setFromObject(object)
+  if (box.isEmpty()) return
   const size = box.getSize(new THREE.Vector3())
   const center = box.getCenter(new THREE.Vector3())
+  const longest = Math.max(size.x, size.y, size.z)
+  if (!Number.isFinite(longest) || longest < 1e-5) return
   object.position.x -= center.x
   object.position.z -= center.z
   object.position.y -= box.min.y
-  const longest = Math.max(size.x, size.y, size.z)
   object.scale.multiplyScalar(1.18 / longest)
   object.updateMatrixWorld(true)
   const seated = new THREE.Box3().setFromObject(object)
-  object.position.y += top - seated.min.y
+  if (!seated.isEmpty()) object.position.y += top - seated.min.y
 }
 
 export function prepareLoadedScan(root: THREE.Object3D, uniforms: MeltUniforms) {
   root.traverse((child) => {
-    if (child instanceof THREE.Mesh) prepareMeltMesh(child, uniforms)
+    if (!(child instanceof THREE.Mesh)) return
+    child.visible = true
+    child.geometry.computeVertexNormals()
+    prepareMeltMesh(child, uniforms)
   })
   sitOnFloor(root)
 }

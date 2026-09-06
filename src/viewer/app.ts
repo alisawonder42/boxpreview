@@ -146,7 +146,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     uniforms,
     gtao: post.gtao,
     controls,
-    scan: SCAN_SOURCES[0].name,
+    scan: 'GLB',
     onScan: async (name) => {
       const source = SCAN_SOURCES.find((item) => item.name === name)
       if (!source) return

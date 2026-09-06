@@ -1,10 +1,11 @@
 import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { defineConfig, type Plugin } from 'vite'
 
 const PUBLISH = [
   ['3DModel.fbx', '3DModel.fbx'],
   ['Box-cleaned.glb', 'box.glb'],
+  ['3DModel.fbm/3DModel.jpg', '3DModel.fbm/3DModel.jpg'],
 ] as const
 
 function publishScan(): Plugin {
@@ -13,7 +14,9 @@ function publishScan(): Plugin {
     mkdirSync(destDir, { recursive: true })
     for (const [from, to] of PUBLISH) {
       if (!existsSync(resolve(from))) continue
-      copyFileSync(resolve(from), resolve(destDir, to))
+      const dest = resolve(destDir, to)
+      mkdirSync(dirname(dest), { recursive: true })
+      copyFileSync(resolve(from), dest)
     }
   }
 

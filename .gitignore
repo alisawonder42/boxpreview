@@ -10,5 +10,6 @@ tsconfig.node.tsbuildinfo
 public/models/box.glb
 public/models/*.glb
 public/models/*.fbx
+public/models/**/*.jpg
 !public/models/README.md
 docs/models/*.glb
