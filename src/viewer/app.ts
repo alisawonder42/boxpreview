@@ -259,7 +259,6 @@ export async function startViewer(canvas: HTMLCanvasElement) {
       meltedAway = true
       meltTarget = SPLASH_HOLD
     } else if (!dragged && meltedAway) {
-      if (Math.abs(melt - SPLASH_HOLD) > 0.05) return
       startSplashTour()
     }
     holding = false
@@ -407,7 +406,8 @@ export async function startViewer(canvas: HTMLCanvasElement) {
       if (tour.phase === 'falling') hint.textContent = ''
       else if (isTouring(tour)) hint.textContent = ''
       else if (sequenceLock) hint.textContent = ''
-      else if (meltedAway) hint.textContent = 'Click the splash to send it around'
+      else if (meltedAway && melt >= SPLASH_HOLD * 0.72) hint.textContent = 'Click the splash to send it around'
+      else if (meltedAway) hint.textContent = ''
       else hint.textContent = melt > 0.12 ? 'Click to return' : 'Drag to turn · Click to unmake'
     }
 
