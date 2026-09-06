@@ -304,12 +304,15 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     setMeltLook(subject, shown, uniforms)
     const faded = 1 - THREE.MathUtils.smoothstep(anim.fadeStart, anim.fadeEnd, shown)
     const present = faded > 0.04
+    const solid = shown < 0.05
     subject.visible = present
     if (present && !subject.parent) scene.add(subject)
     if (!present && subject.parent) scene.remove(subject)
-    direct.castShadow = present
-    ground.receiveShadow = present
-    post.gtao.enabled = present && shown < 0.2
+    // Default depth still sees the undeformed scan. Kill the solid-box
+    // shadow as soon as the melt starts so it cannot linger.
+    direct.castShadow = solid
+    ground.receiveShadow = solid
+    post.gtao.enabled = solid
     post.setMeltBloom(present ? shown : 0)
     post.setMeltOcclusion(shown, ao.blendIntensity)
 
