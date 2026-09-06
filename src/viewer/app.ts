@@ -2,9 +2,12 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js'
 import {
+  applyMeltAnim,
   bindMeltBounds,
+  createMeltAnim,
   createMeltUniforms,
   setMeltLook,
+  visualMelt,
 } from './melt'
 import {
   createGround,
@@ -87,6 +90,8 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   scene.add(createGround())
 
   const uniforms = createMeltUniforms()
+  const anim = createMeltAnim()
+  applyMeltAnim(uniforms, anim)
   let subject: THREE.Object3D = createStandInBox(uniforms)
   scene.add(subject)
   bindMeltBounds(subject, uniforms)
@@ -140,14 +145,6 @@ export async function startViewer(canvas: HTMLCanvasElement) {
 
   const post = createPost(renderer, scene, camera)
 
-  attachDebugMenu({
-    renderer,
-    rig: { ambient, hemi, windowDiffuse, skyDiffuse, direct, fill },
-    uniforms,
-    gtao: post.gtao,
-    controls,
-  })
-
   const clock = new THREE.Clock()
   let melt = 0
   let meltTarget = 0
@@ -158,6 +155,25 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   let pointer = new THREE.Vector2()
   let down = new THREE.Vector2()
   let hintGone = false
+
+  attachDebugMenu({
+    renderer,
+    rig: { ambient, hemi, windowDiffuse, skyDiffuse, direct, fill },
+    uniforms,
+    anim,
+    gtao: post.gtao,
+    controls,
+    onPlay: () => {
+      anim.scrubbing = false
+      meltedAway = true
+      meltTarget = 1
+    },
+    onReform: () => {
+      anim.scrubbing = false
+      meltedAway = false
+      meltTarget = 0
+    },
+  })
 
   const raycaster = new THREE.Raycaster()
   const hitsSubject = (clientX: number, clientY: number) => {
@@ -191,9 +207,11 @@ export async function startViewer(canvas: HTMLCanvasElement) {
 
   const endPointer = () => {
     if (!dragged && downOnSubject) {
+      anim.scrubbing = false
       meltedAway = !meltedAway
       meltTarget = meltedAway ? 1 : 0
     } else if (!dragged && meltedAway) {
+      anim.scrubbing = false
       meltedAway = false
       meltTarget = 0
     }
@@ -212,6 +230,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   window.addEventListener('keydown', (event) => {
     if (event.code === 'Space') {
       event.preventDefault()
+      anim.scrubbing = false
       meltTarget = 1
       hideHint()
     }
@@ -223,6 +242,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   reset?.addEventListener('click', () => {
     camera.position.copy(home.position)
     controls.target.copy(home.target)
+    anim.scrubbing = false
     melt = 0
     meltTarget = 0
     meltedAway = false
@@ -268,25 +288,37 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     const dt = clock.getDelta()
     uniforms.uTime.value = clock.elapsedTime
     if (holding) meltTarget = 1
-    const rate = meltTarget > melt ? 1.55 : 2.6
-    melt = THREE.MathUtils.damp(melt, meltTarget, rate, dt)
-    uniforms.uMelt.value = melt
-    setMeltLook(subject, melt)
-    post.setMeltBloom(melt)
+    if (anim.scrubbing) {
+      melt = anim.progress
+      meltTarget = anim.progress
+      meltedAway = anim.progress > 0.85
+    } else {
+      const rate = meltTarget > melt ? anim.meltIn : anim.meltOut
+      melt = THREE.MathUtils.damp(melt, meltTarget, rate, dt)
+      if (meltTarget === 1 && melt > 0.992) melt = 1
+      if (meltTarget === 0 && melt < 0.008) melt = 0
+      anim.progress = melt
+    }
+    applyMeltAnim(uniforms, anim)
+    const shown = visualMelt(melt, anim.ease)
+    uniforms.uMelt.value = shown
+    setMeltLook(subject, shown, uniforms)
+    subject.visible = shown < anim.fadeEnd - 0.001
+    post.setMeltBloom(shown)
 
     const box = new THREE.Box3().setFromObject(subject)
     const origin = new THREE.Vector3()
     box.getCenter(origin)
     origin.y = box.min.y + 0.1
-    drips.update(melt, clock.elapsedTime, origin)
+    drips.update(shown, clock.elapsedTime, origin)
 
     const puddleMat = puddle.material as THREE.MeshPhysicalMaterial
-    const puddleIn = THREE.MathUtils.smoothstep(0.08, 0.5, melt)
-    const puddleOut = 1 - THREE.MathUtils.smoothstep(0.52, 0.88, melt)
-    puddle.visible = puddleIn * puddleOut > 0.02
+    const puddleIn = THREE.MathUtils.smoothstep(anim.puddleInStart, anim.puddleInEnd, shown)
+    const puddleOut = 1 - THREE.MathUtils.smoothstep(anim.puddleOutStart, anim.puddleOutEnd, shown)
+    puddle.visible = subject.visible && puddleIn * puddleOut > 0.02
     puddle.scale.setScalar(0.28 + puddleIn * 1.7)
-    puddle.position.x = THREE.MathUtils.lerp(0, 1.15, THREE.MathUtils.smoothstep(0.4, 0.95, melt))
-    puddle.position.z = THREE.MathUtils.lerp(0, -0.55, THREE.MathUtils.smoothstep(0.4, 0.95, melt))
+    puddle.position.x = THREE.MathUtils.lerp(0, 1.15, THREE.MathUtils.smoothstep(anim.drainStart, anim.drainEnd, shown))
+    puddle.position.z = THREE.MathUtils.lerp(0, -0.55, THREE.MathUtils.smoothstep(anim.drainStart, anim.drainEnd, shown))
     puddleMat.opacity = THREE.MathUtils.clamp(puddleIn * puddleOut * 0.9, 0, 0.9)
 
     if (hint) {

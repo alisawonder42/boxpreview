@@ -41,6 +41,11 @@ body.embed [data-chrome] {
   z-index: 20;
 }
 
+.lil-gui.root {
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+}
+
 #stage {
   display: block;
   width: 100%;
