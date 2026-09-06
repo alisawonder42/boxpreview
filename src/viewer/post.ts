@@ -35,5 +35,5 @@ export function createPost(
     bloom.strength = melt * 0.28
   }
 
-  return { composer, resize, setMeltBloom }
+  return { composer, resize, setMeltBloom, gtao }
 }

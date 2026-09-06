@@ -55,6 +55,8 @@ export type MeltUniforms = {
   uCenter: { value: THREE.Vector3 }
   uBoundsMin: { value: THREE.Vector3 }
   uBoundsMax: { value: THREE.Vector3 }
+  uLift: { value: number }
+  uGamma: { value: number }
 }
 
 export function createMeltUniforms(): MeltUniforms {
@@ -64,6 +66,8 @@ export function createMeltUniforms(): MeltUniforms {
     uCenter: { value: new THREE.Vector3() },
     uBoundsMin: { value: new THREE.Vector3(-0.5, 0, -0.5) },
     uBoundsMax: { value: new THREE.Vector3(0.5, 1, 0.5) },
+    uLift: { value: 1.7 },
+    uGamma: { value: 0.78 },
   }
 }
 
@@ -87,6 +91,8 @@ export function applyMeltMaterial(material: THREE.MeshStandardMaterial, uniforms
     shader.uniforms.uCenter = uniforms.uCenter
     shader.uniforms.uBoundsMin = uniforms.uBoundsMin
     shader.uniforms.uBoundsMax = uniforms.uBoundsMax
+    shader.uniforms.uLift = uniforms.uLift
+    shader.uniforms.uGamma = uniforms.uGamma
 
     shader.vertexShader = shader.vertexShader
       .replace(
@@ -124,7 +130,9 @@ export function applyMeltMaterial(material: THREE.MeshStandardMaterial, uniforms
       .replace(
         '#include <common>',
         `#include <common>
-        uniform float uMelt;`,
+        uniform float uMelt;
+        uniform float uLift;
+        uniform float uGamma;`,
       )
       .replace(
         '#include <roughnessmap_fragment>',
@@ -135,7 +143,7 @@ export function applyMeltMaterial(material: THREE.MeshStandardMaterial, uniforms
         '#include <color_fragment>',
         `#include <color_fragment>
         // The KIRI albedo is darker than the real box. Lift it toward the photos.
-        diffuseColor.rgb = pow(max(diffuseColor.rgb, vec3(0.0)), vec3(0.78)) * 1.7;`,
+        diffuseColor.rgb = pow(max(diffuseColor.rgb, vec3(0.0)), vec3(uGamma)) * uLift;`,
       )
   }
 }

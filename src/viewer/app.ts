@@ -18,6 +18,7 @@ import {
 } from './models'
 import { createDrips } from './drips'
 import { createPost } from './post'
+import { attachDebugMenu } from './debug'
 
 const HOLD_MS = 340
 const MOVE_PX = 7
@@ -52,32 +53,37 @@ export async function startViewer(canvas: HTMLCanvasElement) {
 
   RectAreaLightUniformsLib.init()
 
-  scene.add(new THREE.AmbientLight('#f6efe4', 0.7))
-  scene.add(new THREE.HemisphereLight('#fff8ef', '#e8dccb', 1.35))
+  const ambient = new THREE.AmbientLight('#f6efe4', 0.55)
+  const hemi = new THREE.HemisphereLight('#fff8ef', '#e8dccb', 1.2)
+  scene.add(ambient, hemi)
 
-  const windowPane = new THREE.RectAreaLight('#fff6ea', 7, 8, 5)
-  windowPane.position.set(-3.6, 2.6, 1.4)
-  windowPane.lookAt(0, 0.4, 0)
-  scene.add(windowPane)
+  const windowDiffuse = new THREE.RectAreaLight('#fff6ea', 5, 8, 5)
+  windowDiffuse.position.set(-3.6, 2.6, 1.4)
+  windowDiffuse.lookAt(0, 0.4, 0)
+  scene.add(windowDiffuse)
 
-  const sky = new THREE.RectAreaLight('#fffaf3', 3.2, 10, 6)
-  sky.position.set(0.2, 5.2, 0.4)
-  sky.lookAt(0, 0.3, 0)
-  scene.add(sky)
+  const skyDiffuse = new THREE.RectAreaLight('#fffaf3', 2.4, 10, 6)
+  skyDiffuse.position.set(0.2, 5.2, 0.4)
+  skyDiffuse.lookAt(0, 0.3, 0)
+  scene.add(skyDiffuse)
 
-  const shadowOnly = new THREE.DirectionalLight('#fff6ea', 0.22)
-  shadowOnly.position.set(-2.4, 5.5, 2.2)
-  shadowOnly.castShadow = true
-  shadowOnly.shadow.mapSize.set(2048, 2048)
-  shadowOnly.shadow.camera.near = 1
-  shadowOnly.shadow.camera.far = 16
-  shadowOnly.shadow.camera.left = -4
-  shadowOnly.shadow.camera.right = 4
-  shadowOnly.shadow.camera.top = 4
-  shadowOnly.shadow.camera.bottom = -4
-  shadowOnly.shadow.radius = 14
-  shadowOnly.shadow.bias = -0.00012
-  scene.add(shadowOnly)
+  const direct = new THREE.DirectionalLight('#fff6ea', 0.7)
+  direct.position.set(-3.2, 3.8, 2.4)
+  direct.castShadow = true
+  direct.shadow.mapSize.set(2048, 2048)
+  direct.shadow.camera.near = 1
+  direct.shadow.camera.far = 16
+  direct.shadow.camera.left = -4
+  direct.shadow.camera.right = 4
+  direct.shadow.camera.top = 4
+  direct.shadow.camera.bottom = -4
+  direct.shadow.radius = 10
+  direct.shadow.bias = -0.00015
+  scene.add(direct)
+
+  const fill = new THREE.DirectionalLight('#f3ebe0', 0.35)
+  fill.position.set(2.8, 1.8, -1.4)
+  scene.add(fill)
 
   scene.add(createGround())
 
@@ -132,6 +138,14 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   }
 
   const post = createPost(renderer, scene, camera)
+
+  attachDebugMenu({
+    renderer,
+    rig: { ambient, hemi, windowDiffuse, skyDiffuse, direct, fill },
+    uniforms,
+    gtao: post.gtao,
+    controls,
+  })
 
   const clock = new THREE.Clock()
   let melt = 0
