@@ -4,10 +4,9 @@ import * as THREE from 'three'
 export const SPLASH_HOLD = 0.62
 
 export const TOUR = {
-  crawlSeconds: 7.4,
-  hangSeconds: 0.18,
-  gravity: 28,
-  planeY: 0.04,
+  crawlSeconds: 6.8,
+  hangSeconds: 0.22,
+  gravity: 6.4,
 }
 
 export type TourState = {
@@ -19,7 +18,9 @@ export type TourState = {
   home: THREE.Vector3
   world: THREE.Vector3
   offset: THREE.Vector3
-  curve: THREE.CatmullRomCurve3 | null
+  homeNdc: THREE.Vector2
+  ndc: THREE.Vector2
+  curveNdc: THREE.CatmullRomCurve3 | null
 }
 
 export function createTour(): TourState {
@@ -32,16 +33,19 @@ export function createTour(): TourState {
     home: new THREE.Vector3(),
     world: new THREE.Vector3(),
     offset: new THREE.Vector3(),
-    curve: null,
+    homeNdc: new THREE.Vector2(),
+    ndc: new THREE.Vector2(),
+    curveNdc: null,
   }
 }
 
-function unprojectOnViewPlane(
-  ndc: THREE.Vector2,
-  camera: THREE.Camera,
-  home: THREE.Vector3,
-  target: THREE.Vector3,
-) {
+function toNdc(world: THREE.Vector3, camera: THREE.Camera, target: THREE.Vector2) {
+  const clip = world.clone().project(camera)
+  target.set(clip.x, clip.y)
+  return target
+}
+
+function fromNdc(ndc: THREE.Vector2, camera: THREE.Camera, home: THREE.Vector3, target: THREE.Vector3) {
   const normal = new THREE.Vector3()
   camera.getWorldDirection(normal)
   const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, home)
@@ -53,22 +57,20 @@ function unprojectOnViewPlane(
   return target
 }
 
-/** Screen-frame path: around the view, ending at the top-center. */
-export function viewportFramePath(camera: THREE.Camera, home: THREE.Vector3) {
+/** NDC path around the viewport frame, ending at top-center. */
+function frameNdcPath() {
   const frame: Array<[number, number]> = [
-    [0, -0.78],
-    [-0.55, -0.8],
-    [-0.84, -0.62],
-    [-0.88, 0.02],
-    [-0.84, 0.58],
-    [-0.5, 0.84],
-    [-0.18, 0.9],
-    [0, 0.92],
+    [0.0, -0.62],
+    [-0.52, -0.7],
+    [-0.78, -0.42],
+    [-0.82, 0.08],
+    [-0.78, 0.48],
+    [-0.42, 0.7],
+    [-0.12, 0.76],
+    [0.0, 0.78],
   ]
-  const pts = frame.map(([x, y]) =>
-    unprojectOnViewPlane(new THREE.Vector2(x, y), camera, home, new THREE.Vector3()),
-  )
-  return new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.15)
+  const pts = frame.map(([x, y]) => new THREE.Vector3(x, y, 0))
+  return new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.12)
 }
 
 export function resetTour(tour: TourState) {
@@ -77,7 +79,7 @@ export function resetTour(tour: TourState) {
   tour.distance = 0
   tour.hangT = 0
   tour.fallVel = 0
-  tour.curve = null
+  tour.curveNdc = null
   tour.offset.set(0, 0, 0)
 }
 
@@ -90,29 +92,41 @@ export function beginTour(tour: TourState, camera: THREE.Camera, home: THREE.Vec
   tour.home.copy(home)
   tour.world.copy(home)
   tour.offset.set(0, 0, 0)
-  tour.curve = viewportFramePath(camera, home)
+  toNdc(home, camera, tour.homeNdc)
+  tour.ndc.copy(tour.homeNdc)
+  tour.curveNdc = frameNdcPath()
 }
 
-export function tickTour(tour: TourState, dt: number): 'crawling' | 'hanging' | 'falling' | 'done' {
+export function tickTour(tour: TourState, dt: number, camera: THREE.Camera): 'crawling' | 'hanging' | 'falling' | 'done' {
   if (!tour.playing) return 'done'
 
-  if (tour.phase === 'crawling' && tour.curve) {
+  const place = () => {
+    fromNdc(tour.ndc, camera, tour.home, tour.world)
+    tour.offset.copy(tour.world).sub(tour.home)
+  }
+
+  if (tour.phase === 'crawling' && tour.curveNdc) {
     tour.distance = Math.min(1, tour.distance + dt / TOUR.crawlSeconds)
-    const point = tour.curve.getPoint(tour.distance)
-    const onto = THREE.MathUtils.smoothstep(tour.distance, 0, 0.12)
-    tour.world.lerpVectors(tour.home, point, onto)
+    const point = tour.curveNdc.getPoint(tour.distance)
+    const onto = THREE.MathUtils.smoothstep(tour.distance, 0, 0.1)
+    tour.ndc.set(
+      THREE.MathUtils.lerp(tour.homeNdc.x, point.x, onto),
+      THREE.MathUtils.lerp(tour.homeNdc.y, point.y, onto),
+    )
+    place()
     if (tour.distance >= 1) {
-      tour.world.copy(point)
+      tour.ndc.set(0, 0.78)
+      place()
       tour.phase = 'hanging'
       tour.hangT = 0
     }
-    tour.offset.copy(tour.world).sub(tour.home)
     return tour.phase === 'hanging' ? 'hanging' : 'crawling'
   }
 
   if (tour.phase === 'hanging') {
+    tour.ndc.set(0, 0.78)
+    place()
     tour.hangT += dt
-    tour.offset.copy(tour.world).sub(tour.home)
     if (tour.hangT >= TOUR.hangSeconds) {
       tour.phase = 'falling'
       tour.fallVel = 0
@@ -122,17 +136,16 @@ export function tickTour(tour: TourState, dt: number): 'crawling' | 'hanging' | 
 
   if (tour.phase === 'falling') {
     tour.fallVel += TOUR.gravity * dt
-    tour.world.y -= tour.fallVel * dt
-    const pull = 1 - Math.exp(-10 * dt)
-    tour.world.x += (tour.home.x - tour.world.x) * pull
-    tour.world.z += (tour.home.z - tour.world.z) * pull
-    if (tour.world.y <= tour.home.y) {
+    tour.ndc.y -= tour.fallVel * dt
+    tour.ndc.x += (tour.homeNdc.x - tour.ndc.x) * (1 - Math.exp(-14 * dt))
+    if (tour.ndc.y <= tour.homeNdc.y) {
+      tour.ndc.copy(tour.homeNdc)
       tour.world.copy(tour.home)
       tour.offset.set(0, 0, 0)
       resetTour(tour)
       return 'done'
     }
-    tour.offset.copy(tour.world).sub(tour.home)
+    place()
     return 'falling'
   }
 

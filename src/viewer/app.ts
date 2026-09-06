@@ -337,7 +337,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     const dt = clock.getDelta()
     uniforms.uTime.value = clock.elapsedTime
     if (holding && !sequenceLock && !isTouring(tour)) meltTarget = SPLASH_HOLD
-    if (tour.playing && tickTour(tour, dt) === 'done') {
+    if (tour.playing && tickTour(tour, dt, camera) === 'done') {
       meltedAway = false
       meltTarget = 0
     }
