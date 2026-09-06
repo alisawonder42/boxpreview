@@ -258,9 +258,8 @@ export async function startViewer(canvas: HTMLCanvasElement) {
       anim.scrubbing = false
       meltedAway = true
       meltTarget = SPLASH_HOLD
-      sequenceLock = true
-      controls.enabled = false
     } else if (!dragged && meltedAway) {
+      if (Math.abs(melt - SPLASH_HOLD) > 0.05) return
       startSplashTour()
     }
     holding = false
@@ -350,10 +349,6 @@ export async function startViewer(canvas: HTMLCanvasElement) {
       meltedAway = false
       meltTarget = 0
     }
-    if (sequenceLock && !tour.playing && meltTarget === SPLASH_HOLD && Math.abs(melt - SPLASH_HOLD) < 0.008) {
-      sequenceLock = false
-      controls.enabled = true
-    }
     if (sequenceLock && !tour.playing && meltTarget === 0 && melt < 0.008) {
       sequenceLock = false
       controls.enabled = true
@@ -366,7 +361,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     } else if (!isTouring(tour)) {
       const rate = meltTarget > melt ? anim.meltIn : anim.meltOut
       melt = THREE.MathUtils.damp(melt, meltTarget, rate, dt)
-      if (meltTarget === SPLASH_HOLD && Math.abs(melt - SPLASH_HOLD) < 0.008) melt = SPLASH_HOLD
+      if (meltTarget === SPLASH_HOLD && melt > SPLASH_HOLD - 0.05) melt = SPLASH_HOLD
       if (meltTarget === 0 && melt < 0.008) melt = 0
       anim.progress = melt
     }
@@ -403,6 +398,9 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     puddle.position.y = FLOOR + 0.004
     puddle.position.z = THREE.MathUtils.lerp(0, -0.55, THREE.MathUtils.smoothstep(anim.drainStart, anim.drainEnd, shown))
     puddleMat.opacity = THREE.MathUtils.clamp(puddleIn * puddleOut * 0.9, 0, 0.9)
+
+    canvas.dataset.phase = tour.playing ? tour.phase : meltedAway ? 'splash' : 'box'
+    canvas.dataset.lock = sequenceLock || isTouring(tour) ? '1' : '0'
 
     if (hint) {
       if (tour.phase === 'falling') hint.textContent = ''
