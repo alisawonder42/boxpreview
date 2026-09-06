@@ -9,7 +9,7 @@ type Drop = {
   speed: number
 }
 
-export function createDrips(map: THREE.Texture | null, count = 56) {
+export function createDrips(map: THREE.Texture | null, count = 72) {
   const geo = new THREE.SphereGeometry(0.028, 14, 12)
   geo.scale(0.72, 1.55, 0.72)
   const mat = new THREE.MeshPhysicalMaterial({
@@ -19,6 +19,8 @@ export function createDrips(map: THREE.Texture | null, count = 56) {
     metalness: 0.02,
     clearcoat: 1,
     clearcoatRoughness: 0.05,
+    transparent: true,
+    opacity: 1,
   })
   const mesh = new THREE.InstancedMesh(geo, mat, count)
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
@@ -35,21 +37,28 @@ export function createDrips(map: THREE.Texture | null, count = 56) {
   }))
 
   const update = (melt: number, time: number, origin: THREE.Vector3) => {
-    const active = melt > 0.12
+    const active = melt > 0.1 && melt < 0.88
     mesh.visible = active
+    mesh.castShadow = active && melt < 0.7
     if (!active) return
+    mat.opacity = 1 - THREE.MathUtils.smoothstep(0.58, 0.86, melt)
+    mat.transparent = melt > 0.55
 
     for (let i = 0; i < count; i++) {
       const drop = drops[i]
-      const local = Math.max(0, melt - drop.delay * 0.45)
-      const fall = (local * drop.speed + time * 0.15 * local) % 1
+      const local = Math.max(0, melt - drop.delay * 0.35)
+      const fall = (local * drop.speed + time * 0.22 * local) % 1
+      const slide = THREE.MathUtils.smoothstep(0.5, 1, melt)
       dummy.position.set(
-        origin.x + drop.x * (0.7 + melt),
-        origin.y - fall * 0.95,
-        origin.z + drop.z * (0.7 + melt),
+        origin.x + drop.x * (0.8 + melt * 1.4) + slide * 0.7,
+        origin.y - fall * (0.7 + melt * 0.55),
+        origin.z + drop.z * (0.8 + melt * 1.4) - slide * 0.35,
       )
-      const squash = THREE.MathUtils.lerp(1, 1.7, fall)
-      dummy.scale.set(1 / squash, squash, 1 / squash)
+      const squash = THREE.MathUtils.lerp(1, 1.85, fall)
+      dummy.scale.setScalar(THREE.MathUtils.lerp(1, 0.35, slide))
+      dummy.scale.x /= squash
+      dummy.scale.z /= squash
+      dummy.scale.y *= squash
       dummy.rotation.set(0, drop.seed, 0)
       dummy.updateMatrix()
       mesh.setMatrixAt(i, dummy.matrix)

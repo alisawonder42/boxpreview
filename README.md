@@ -19,7 +19,7 @@ Production build: `npm run build`. Preview it with `npm run preview`.
 
 ## Your scan
 
-Drop the cleaned KIRI file at `public/models/box.glb`. Until that file is in the repo, the viewer uses a patterned stand-in and you can drag a `.glb` / `.fbx` onto the page.
+The viewer loads **`BoxModel.fbx`** and its print (`3DModel.fbm/3DModel.jpg`). You can also drag another `.fbx` onto the page.
 
 ## Live preview
 

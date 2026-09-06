@@ -16,7 +16,7 @@ export function createPost(
   composer.addPass(new RenderPass(scene, camera))
 
   const gtao = new GTAOPass(scene, camera, size.x, size.y)
-  gtao.blendIntensity = 0.34
+  gtao.blendIntensity = 1
   composer.addPass(gtao)
 
   const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0, 0.4, 0.9)
