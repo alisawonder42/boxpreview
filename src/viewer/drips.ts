@@ -37,10 +37,11 @@ export function createDrips(map: THREE.Texture | null, count = 72) {
   }))
 
   const update = (melt: number, time: number, origin: THREE.Vector3) => {
-    const active = melt > 0.1 && melt < 0.92
+    const active = melt > 0.1 && melt < 0.88
     mesh.visible = active
+    mesh.castShadow = active && melt < 0.7
     if (!active) return
-    mat.opacity = 1 - THREE.MathUtils.smoothstep(0.62, 0.9, melt)
+    mat.opacity = 1 - THREE.MathUtils.smoothstep(0.58, 0.86, melt)
     mat.transparent = melt > 0.55
 
     for (let i = 0; i < count; i++) {

@@ -295,6 +295,8 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     } else {
       const rate = meltTarget > melt ? anim.meltIn : anim.meltOut
       melt = THREE.MathUtils.damp(melt, meltTarget, rate, dt)
+      if (meltTarget === 1 && melt > 0.992) melt = 1
+      if (meltTarget === 0 && melt < 0.008) melt = 0
       anim.progress = melt
     }
     applyMeltAnim(uniforms, anim)

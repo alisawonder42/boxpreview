@@ -295,8 +295,13 @@ export function bindMeltBounds(root: THREE.Object3D, uniforms: MeltUniforms) {
 export function setMeltLook(root: THREE.Object3D, melt: number, uniforms: MeltUniforms) {
   const fadeStart = uniforms.uFadeStart.value
   const fadeEnd = uniforms.uFadeEnd.value
+  const faded = 1 - THREE.MathUtils.smoothstep(fadeStart, fadeEnd, melt)
+  const gone = faded <= 0.02
   root.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return
+    child.visible = !gone
+    child.castShadow = faded > 0.08
+    child.receiveShadow = !gone
     const mats = Array.isArray(child.material) ? child.material : [child.material]
     for (const mat of mats) {
       if (!(mat instanceof THREE.MeshStandardMaterial)) continue
@@ -305,7 +310,7 @@ export function setMeltLook(root: THREE.Object3D, melt: number, uniforms: MeltUn
       mat.envMapIntensity = THREE.MathUtils.lerp(0, 0.28, melt)
       mat.metalness = 0
       mat.transparent = melt > fadeStart - 0.08
-      mat.opacity = 1 - THREE.MathUtils.smoothstep(fadeStart, fadeEnd, melt)
+      mat.opacity = faded
       mat.depthWrite = melt < fadeEnd - 0.18
     }
   })
