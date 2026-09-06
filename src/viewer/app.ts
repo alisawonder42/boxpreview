@@ -86,7 +86,8 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   fill.position.set(2.8, 1.8, -1.4)
   scene.add(fill)
 
-  scene.add(createGround())
+  const ground = createGround()
+  scene.add(ground)
 
   const uniforms = createMeltUniforms()
   const anim = createMeltAnim()
@@ -104,7 +105,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   setSource('Stand-in box — drop your scan to replace it')
 
   const replaceSubject = (next: THREE.Object3D, label: string) => {
-    scene.remove(subject)
+    if (subject.parent) scene.remove(subject)
     subject = next
     scene.add(subject)
     bindMeltBounds(subject, uniforms)
@@ -301,10 +302,15 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     const shown = visualMelt(melt, anim.ease)
     uniforms.uMelt.value = shown
     setMeltLook(subject, shown, uniforms)
-    const present = shown < anim.fadeEnd - 0.001
+    const faded = 1 - THREE.MathUtils.smoothstep(anim.fadeStart, anim.fadeEnd, shown)
+    const present = faded > 0.04
     subject.visible = present
+    if (present && !subject.parent) scene.add(subject)
+    if (!present && subject.parent) scene.remove(subject)
     direct.castShadow = present
-    post.setMeltBloom(shown)
+    ground.receiveShadow = present
+    post.gtao.enabled = present && shown < 0.2
+    post.setMeltBloom(present ? shown : 0)
     post.setMeltOcclusion(shown, ao.blendIntensity)
 
     const puddleMat = puddle.material as THREE.MeshPhysicalMaterial
