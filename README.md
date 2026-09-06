@@ -25,15 +25,15 @@ Drop the cleaned KIRI file at `public/models/box.glb`. Until that file is in the
 
 Temporary Vercel deploy with your `Box-cleaned.glb` scan (claim it to keep it):
 
-- Viewer: https://temporary-rushing-viola-o9usqam.vercel.app/
-- Embed (no chrome): https://temporary-rushing-viola-o9usqam.vercel.app/?embed=1
-- Claim on your Vercel account: https://vercel.com/claim-deployment?code=1785481c-012d-4b3c-817a-227fd766e3a6
+- Viewer: https://temporary-rapid-zither-7mxq8tw.vercel.app/
+- Embed (no chrome): https://temporary-rapid-zither-7mxq8tw.vercel.app/?embed=1
+- Claim on your Vercel account: https://vercel.com/claim-deployment?code=ef63fc91-5b6e-4f31-a09b-2a5ed31cf5a8
 
 ## Inject into the portfolio
 
 ```html
 <iframe
-  src="https://temporary-rushing-viola-o9usqam.vercel.app/?embed=1"
+  src="https://temporary-rapid-zither-7mxq8tw.vercel.app/?embed=1"
   title="Box preview"
   style="width:100%;height:72vh;border:0;background:#f4f1ea"
   allow="fullscreen"
