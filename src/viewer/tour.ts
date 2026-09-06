@@ -5,8 +5,8 @@ export const SPLASH_HOLD = 0.62
 
 export const TOUR = {
   crawlSeconds: 6.8,
-  hangSeconds: 0.22,
-  gravity: 6.4,
+  hangSeconds: 0.32,
+  gravity: 5.2,
 }
 
 export type TourState = {
@@ -66,8 +66,8 @@ function frameNdcPath() {
     [-0.82, 0.08],
     [-0.78, 0.48],
     [-0.42, 0.7],
-    [-0.12, 0.76],
-    [0.0, 0.78],
+    [-0.12, 0.66],
+    [0.0, 0.68],
   ]
   const pts = frame.map(([x, y]) => new THREE.Vector3(x, y, 0))
   return new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.12)
@@ -115,7 +115,7 @@ export function tickTour(tour: TourState, dt: number, camera: THREE.Camera): 'cr
     )
     place()
     if (tour.distance >= 1) {
-      tour.ndc.set(0, 0.78)
+      tour.ndc.set(0, 0.68)
       place()
       tour.phase = 'hanging'
       tour.hangT = 0
@@ -124,7 +124,7 @@ export function tickTour(tour: TourState, dt: number, camera: THREE.Camera): 'cr
   }
 
   if (tour.phase === 'hanging') {
-    tour.ndc.set(0, 0.78)
+    tour.ndc.set(0, 0.68)
     place()
     tour.hangT += dt
     if (tour.hangT >= TOUR.hangSeconds) {
