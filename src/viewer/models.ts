@@ -7,16 +7,21 @@ import { applyMeltMaterial, prepareMeltMesh, type MeltUniforms } from './melt'
 
 export const FLOOR = 0
 
+export const SCAN_SOURCES = [
+  { name: 'FBX', url: './models/3DModel.fbx' },
+  { name: 'GLB', url: './models/box.glb' },
+] as const
+
 const SCAN_CANDIDATES = [
+  './models/3DModel.fbx',
+  './3DModel.fbx',
   './models/box.glb',
   './models/Box-cleaned.glb',
   './Box-cleaned.glb',
   '../Box-cleaned.glb',
+  'https://cdn.jsdelivr.net/gh/alisawonder42/boxpreview@main/3DModel.fbx',
   'https://cdn.jsdelivr.net/gh/alisawonder42/boxpreview@main/Box-cleaned.glb',
-  './models/3DModel.glb',
-  './models/scan.glb',
   './models/box.fbx',
-  './models/3DModel.fbx',
 ]
 
 export async function loadScanFromUrl(url: string) {
@@ -157,7 +162,7 @@ export function firstAlbedo(root: THREE.Object3D) {
   root.traverse((child) => {
     if (map || !(child instanceof THREE.Mesh)) return
     const mat = Array.isArray(child.material) ? child.material[0] : child.material
-    if (mat instanceof THREE.MeshStandardMaterial && mat.map) map = mat.map
+    if (mat && 'map' in mat && mat.map instanceof THREE.Texture) map = mat.map
   })
   return map
 }

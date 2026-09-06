@@ -66,8 +66,8 @@ export function createMeltUniforms(): MeltUniforms {
     uCenter: { value: new THREE.Vector3() },
     uBoundsMin: { value: new THREE.Vector3(-0.5, 0, -0.5) },
     uBoundsMax: { value: new THREE.Vector3(0.5, 1, 0.5) },
-    uLift: { value: 1.7 },
-    uGamma: { value: 0.78 },
+    uLift: { value: 0.8 },
+    uGamma: { value: 1.03 },
   }
 }
 
@@ -148,6 +148,14 @@ export function applyMeltMaterial(material: THREE.MeshStandardMaterial, uniforms
   }
 }
 
+function textureFrom(source: THREE.Material) {
+  if ('map' in source && source.map instanceof THREE.Texture) {
+    source.map.colorSpace = THREE.SRGBColorSpace
+    return source.map
+  }
+  return null
+}
+
 export function prepareMeltMesh(mesh: THREE.Mesh, uniforms: MeltUniforms) {
   const sources = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
   const next = sources.map((source) => {
@@ -155,9 +163,9 @@ export function prepareMeltMesh(mesh: THREE.Mesh, uniforms: MeltUniforms) {
       source instanceof THREE.MeshStandardMaterial
         ? source.clone()
         : new THREE.MeshStandardMaterial({
-            color: source instanceof THREE.MeshBasicMaterial ? source.color : '#c48a4a',
-            map: source instanceof THREE.MeshBasicMaterial ? source.map : null,
-            roughness: 0.9,
+            color: '#ffffff',
+            map: textureFrom(source),
+            roughness: 0.92,
             metalness: 0,
           })
     applyMeltMaterial(mat, uniforms)

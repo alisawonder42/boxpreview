@@ -17,6 +17,8 @@ type DebugOptions = {
   uniforms: MeltUniforms
   gtao: { blendIntensity: number }
   controls: { autoRotate: boolean; autoRotateSpeed: number }
+  scan?: string
+  onScan?: (name: string) => void
 }
 
 export function attachDebugMenu(options: DebugOptions) {
@@ -24,7 +26,7 @@ export function attachDebugMenu(options: DebugOptions) {
   const embed = document.body.classList.contains('embed')
   if (embed && !params.has('debug')) return null
 
-  const { renderer, rig, uniforms, gtao, controls } = options
+  const { renderer, rig, uniforms, gtao, controls, scan, onScan } = options
   const gui = new GUI({ title: 'Look' })
   gui.domElement.style.right = '12px'
 
@@ -42,6 +44,7 @@ export function attachDebugMenu(options: DebugOptions) {
     ao: gtao.blendIntensity,
     autoRotate: controls.autoRotate,
     spin: controls.autoRotateSpeed,
+    scan: scan ?? 'FBX',
   }
 
   const diffuse = gui.addFolder('Diffuse')
@@ -68,6 +71,12 @@ export function attachDebugMenu(options: DebugOptions) {
   direct.add(state, 'shadowSoft', 0, 24, 0.5).name('shadow soft').onChange((v: number) => {
     rig.direct.shadow.radius = v
   })
+
+  if (onScan) {
+    gui.add(state, 'scan', ['FBX', 'GLB']).name('scan file').onChange((name: string) => {
+      onScan(name)
+    })
+  }
 
   const surface = gui.addFolder('Surface')
   surface.add(state, 'lift', 0.8, 2.6, 0.01).name('print lift').onChange((v: number) => {

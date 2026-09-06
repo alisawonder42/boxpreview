@@ -2,17 +2,19 @@ import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { defineConfig, type Plugin } from 'vite'
 
-const ROOT_SCANS = ['Box-cleaned.glb', 'box.glb', '3DModel.glb', 'scan.glb']
+const PUBLISH = [
+  ['3DModel.fbx', '3DModel.fbx'],
+  ['Box-cleaned.glb', 'box.glb'],
+] as const
 
 function publishScan(): Plugin {
   const copy = () => {
     const destDir = resolve('public/models')
-    const dest = resolve(destDir, 'box.glb')
-    if (existsSync(dest)) return
-    const srcName = ROOT_SCANS.find((name) => existsSync(resolve(name)))
-    if (!srcName) return
     mkdirSync(destDir, { recursive: true })
-    copyFileSync(resolve(srcName), dest)
+    for (const [from, to] of PUBLISH) {
+      if (!existsSync(resolve(from))) continue
+      copyFileSync(resolve(from), resolve(destDir, to))
+    }
   }
 
   return {

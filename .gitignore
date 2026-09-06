@@ -9,5 +9,6 @@ tsconfig.node.tsbuildinfo
 .vercel
 public/models/box.glb
 public/models/*.glb
+public/models/*.fbx
 !public/models/README.md
 docs/models/*.glb
