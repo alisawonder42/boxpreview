@@ -19,7 +19,6 @@ import {
   prepareLoadedScan,
   FLOOR,
 } from './models'
-import { createDrips } from './drips'
 import { createPost } from './post'
 import { attachDebugMenu } from './debug'
 
@@ -98,8 +97,6 @@ export async function startViewer(canvas: HTMLCanvasElement) {
 
   let puddle = createPuddle(firstAlbedo(subject))
   scene.add(puddle)
-  let drips = createDrips(firstAlbedo(subject))
-  scene.add(drips.mesh)
 
   const setSource = (text: string) => {
     if (source) source.textContent = text
@@ -115,7 +112,6 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     scene.remove(puddle)
     puddle = createPuddle(map)
     scene.add(puddle)
-    drips.setMap(map)
     setSource(label)
   }
 
@@ -305,12 +301,6 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     setMeltLook(subject, shown, uniforms)
     subject.visible = shown < anim.fadeEnd - 0.001
     post.setMeltBloom(shown)
-
-    const box = new THREE.Box3().setFromObject(subject)
-    const origin = new THREE.Vector3()
-    box.getCenter(origin)
-    origin.y = box.min.y + 0.1
-    drips.update(shown, clock.elapsedTime, origin)
 
     const puddleMat = puddle.material as THREE.MeshPhysicalMaterial
     const puddleIn = THREE.MathUtils.smoothstep(anim.puddleInStart, anim.puddleInEnd, shown)
