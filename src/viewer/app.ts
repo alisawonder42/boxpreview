@@ -191,6 +191,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
       sequenceLock = false
       meltedAway = true
       meltTarget = SPLASH_HOLD
+      controls.enabled = true
     },
     onReform: () => {
       anim.scrubbing = false
@@ -198,6 +199,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
       sequenceLock = false
       meltedAway = false
       meltTarget = 0
+      controls.enabled = true
     },
   })
 
@@ -218,9 +220,14 @@ export async function startViewer(canvas: HTMLCanvasElement) {
 
   canvas.addEventListener('pointerdown', (event) => {
     down.set(event.clientX, event.clientY)
-    downOnSubject = hitsSubject(event.clientX, event.clientY)
     dragged = false
-    holding = downOnSubject && !meltedAway && !sequenceLock && !isTouring(tour)
+    if (sequenceLock || isTouring(tour)) {
+      holding = false
+      downOnSubject = false
+      return
+    }
+    downOnSubject = hitsSubject(event.clientX, event.clientY)
+    holding = downOnSubject && !meltedAway
     controls.autoRotate = false
     hideHint()
   })
@@ -251,6 +258,8 @@ export async function startViewer(canvas: HTMLCanvasElement) {
       anim.scrubbing = false
       meltedAway = true
       meltTarget = SPLASH_HOLD
+      sequenceLock = true
+      controls.enabled = false
     } else if (!dragged && meltedAway) {
       startSplashTour()
     }
@@ -340,6 +349,10 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     if (tour.playing && tickTour(tour, dt, camera) === 'done') {
       meltedAway = false
       meltTarget = 0
+    }
+    if (sequenceLock && !tour.playing && meltTarget === SPLASH_HOLD && Math.abs(melt - SPLASH_HOLD) < 0.008) {
+      sequenceLock = false
+      controls.enabled = true
     }
     if (sequenceLock && !tour.playing && meltTarget === 0 && melt < 0.008) {
       sequenceLock = false

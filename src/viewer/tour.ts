@@ -5,8 +5,8 @@ export const SPLASH_HOLD = 0.62
 
 export const TOUR = {
   crawlSeconds: 6.8,
-  hangSeconds: 0.32,
-  gravity: 5.2,
+  hangSeconds: 0.4,
+  gravity: 12.5,
 }
 
 export type TourState = {
