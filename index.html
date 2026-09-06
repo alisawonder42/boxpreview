@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#f4f1ea" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <meta
+      name="description"
+      content="A scanned ornamental box. Drag to turn it. Hold, and it forgets that it is solid."
+    />
+    <title>Box Preview — Katarina Ranković</title>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="stage"></canvas>
+      <header class="chrome" data-chrome>
+        <p class="eyebrow">Preview</p>
+        <h1>The box</h1>
+        <p class="lede">
+          Drag to turn it. Hold, and it forgets that it is solid.
+        </p>
+      </header>
+      <aside class="hint" data-chrome>
+        <span data-hint>Drag to turn · Hold to unmake</span>
+      </aside>
+      <footer class="bar" data-chrome>
+        <button type="button" id="reset">Reset view</button>
+        <p class="source" id="source">Looking for a scan…</p>
+      </footer>
+      <div class="drop" id="drop" hidden>
+        <p>Drop a <code>.glb</code> or <code>.fbx</code> to replace the box</p>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
