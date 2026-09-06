@@ -23,14 +23,42 @@ const SCAN_CANDIDATES = [
   'https://cdn.jsdelivr.net/gh/alisawonder42/boxpreview@main/3DModel.fbx',
 ]
 
-export async function loadScanFromUrl(url: string) {
-  const lower = url.split('?')[0].toLowerCase()
-  if (lower.endsWith('.fbx')) {
+function scanKind(url: string, fileName = '') {
+  const name = `${fileName} ${url.split('?')[0]}`.toLowerCase()
+  if (name.includes('.fbx')) return 'fbx'
+  if (name.includes('.glb') || name.includes('.gltf')) return 'gltf'
+  return 'unknown'
+}
+
+function sniffBuffer(buffer: ArrayBuffer) {
+  const head = new TextDecoder().decode(new Uint8Array(buffer, 0, Math.min(24, buffer.byteLength)))
+  if (head.startsWith('Kaydara FBX') || head.includes('FBX')) return 'fbx'
+  return 'gltf'
+}
+
+function textureBaseFor(url: string) {
+  if (url.startsWith('blob:') || url.startsWith('data:')) return './models/'
+  const slash = url.lastIndexOf('/')
+  return slash >= 0 ? url.slice(0, slash + 1) : './models/'
+}
+
+function textureImageReady(map: THREE.Texture | null | undefined) {
+  const image = map?.image as { width?: number; naturalWidth?: number } | undefined
+  return Boolean(image && (image.width || image.naturalWidth))
+}
+
+export async function loadScanFromUrl(url: string, fileName = '') {
+  const kind = scanKind(url, fileName)
+  if (kind === 'unknown') {
+    const buffer = await fetch(url).then((response) => response.arrayBuffer())
+    return parseScanBuffer(buffer, sniffBuffer(buffer), './models/')
+  }
+  if (kind === 'fbx') {
+    const base = textureBaseFor(url)
     const loader = new FBXLoader()
-    const base = url.slice(0, url.lastIndexOf('/') + 1)
     loader.setResourcePath(base)
     const root = await loader.loadAsync(url)
-    await ensureFbxTexture(root, base)
+    await ensureFbxTexture(root)
     return root
   }
   const loader = new GLTFLoader()
@@ -38,29 +66,53 @@ export async function loadScanFromUrl(url: string) {
   return gltf.scene
 }
 
-async function ensureFbxTexture(root: THREE.Object3D, base: string) {
-  const fallback = `${base}3DModel.fbm/3DModel.jpg`
-  let hasMap = false
-  root.traverse((child) => {
-    if (!(child instanceof THREE.Mesh)) return
-    const mats = Array.isArray(child.material) ? child.material : [child.material]
-    hasMap ||= mats.some((mat) => 'map' in mat && Boolean(mat.map))
-  })
-  if (hasMap) return
+async function parseScanBuffer(buffer: ArrayBuffer, kind: 'fbx' | 'gltf', base: string) {
+  if (kind === 'fbx') {
+    const root = new FBXLoader().parse(buffer, base)
+    await ensureFbxTexture(root)
+    return root
+  }
+  const gltf = await new GLTFLoader().parseAsync(buffer, base)
+  return gltf.scene
+}
 
-  const texture = await new THREE.TextureLoader().loadAsync(fallback)
+async function ensureFbxTexture(root: THREE.Object3D) {
+  const fallbacks = ['./models/3DModel.fbm/3DModel.jpg', './3DModel.fbm/3DModel.jpg']
+  if (hasReadyMap(root)) return
+
+  let texture: THREE.Texture | null = null
+  for (const fallback of fallbacks) {
+    try {
+      texture = await new THREE.TextureLoader().loadAsync(fallback)
+      break
+    } catch {
+      // try the next known KIRI sidecar path
+    }
+  }
+  if (!texture) return
+
   texture.colorSpace = THREE.SRGBColorSpace
   texture.flipY = false
   root.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return
     const mats = Array.isArray(child.material) ? child.material : [child.material]
     for (const mat of mats) {
-      if ('map' in mat) {
+      if ('map' in mat && !textureImageReady(mat.map as THREE.Texture | null)) {
         mat.map = texture
         mat.needsUpdate = true
       }
     }
   })
+}
+
+function hasReadyMap(root: THREE.Object3D) {
+  let ready = false
+  root.traverse((child) => {
+    if (ready || !(child instanceof THREE.Mesh)) return
+    const mats = Array.isArray(child.material) ? child.material : [child.material]
+    ready = mats.some((mat) => 'map' in mat && textureImageReady(mat.map as THREE.Texture | null))
+  })
+  return ready
 }
 
 export async function findBundledScan() {
@@ -163,21 +215,32 @@ export function createPuddle(map: THREE.Texture | null) {
   return mesh
 }
 
-export function sitOnFloor(object: THREE.Object3D, top = FLOOR) {
+function meshBounds(object: THREE.Object3D) {
+  const box = new THREE.Box3()
   object.updateMatrixWorld(true)
-  const box = new THREE.Box3().setFromObject(object)
+  object.traverse((child) => {
+    if ((child as THREE.Mesh).isMesh) box.expandByObject(child)
+  })
+  return box
+}
+
+export function sitOnFloor(object: THREE.Object3D, top = FLOOR) {
+  // KIRI FBX files sit far from the origin (cm-scale child + offset mesh).
+  // Scale first, then recenter — scaling after a translate pivots around the
+  // object's origin and throws the box into the fog.
+  const box = meshBounds(object)
   if (box.isEmpty()) return
   const size = box.getSize(new THREE.Vector3())
-  const center = box.getCenter(new THREE.Vector3())
   const longest = Math.max(size.x, size.y, size.z)
   if (!Number.isFinite(longest) || longest < 1e-5) return
-  object.position.x -= center.x
-  object.position.z -= center.z
-  object.position.y -= box.min.y
+
   object.scale.multiplyScalar(1.18 / longest)
-  object.updateMatrixWorld(true)
-  const seated = new THREE.Box3().setFromObject(object)
-  if (!seated.isEmpty()) object.position.y += top - seated.min.y
+  const seated = meshBounds(object)
+  if (seated.isEmpty()) return
+  const center = seated.getCenter(new THREE.Vector3())
+  object.position.x += -center.x
+  object.position.z += -center.z
+  object.position.y += top - seated.min.y
 }
 
 export function prepareLoadedScan(root: THREE.Object3D, uniforms: MeltUniforms) {

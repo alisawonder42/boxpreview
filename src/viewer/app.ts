@@ -151,6 +151,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
       const source = SCAN_SOURCES.find((item) => item.name === name)
       if (!source) return
       try {
+        setSource(`Loading ${source.name}…`)
         const root = await loadScanFromUrl(source.url)
         prepareLoadedScan(root, uniforms)
         replaceSubject(root, `Scan · ${source.name}`)
@@ -227,8 +228,9 @@ export async function startViewer(canvas: HTMLCanvasElement) {
 
   const loadFile = async (file: File) => {
     const url = URL.createObjectURL(file)
+    setSource(`Loading ${file.name}…`)
     try {
-      const root = await loadScanFromUrl(url)
+      const root = await loadScanFromUrl(url, file.name)
       prepareLoadedScan(root, uniforms)
       replaceSubject(root, `Scan · ${file.name}`)
     } catch (error) {
