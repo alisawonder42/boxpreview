@@ -19,7 +19,7 @@ Production build: `npm run build`. Preview it with `npm run preview`.
 
 ## Your scan
 
-The viewer loads the KIRI **FBX** (`3DModel.fbx` plus `3DModel.fbm/3DModel.jpg`). You can also drag another `.fbx` onto the page.
+The viewer loads **`BoxModel.fbx`** and its print (`3DModel.fbm/3DModel.jpg`). You can also drag another `.fbx` onto the page.
 
 ## Live preview
 

@@ -49,7 +49,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   scene.fog = new THREE.Fog('#f4f1ea', 7, 16)
 
   const camera = new THREE.PerspectiveCamera(32, window.innerWidth / window.innerHeight, 0.1, 40)
-  camera.position.set(1.45, 0.95, 1.7)
+  camera.position.set(1.75, 1.08, 2.05)
 
   RectAreaLightUniformsLib.init()
 
@@ -127,7 +127,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   controls.enablePan = false
   controls.enableDamping = true
   controls.dampingFactor = 0.08
-  controls.minDistance = 0.55
+  controls.minDistance = 1.2
   controls.maxDistance = 4.6
   controls.minPolarAngle = 0.72
   controls.maxPolarAngle = 1.42
