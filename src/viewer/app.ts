@@ -38,7 +38,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   renderer.setSize(window.innerWidth, window.innerHeight)
   renderer.outputColorSpace = THREE.SRGBColorSpace
   renderer.toneMapping = THREE.ACESFilmicToneMapping
-  renderer.toneMappingExposure = 0.86
+  renderer.toneMappingExposure = 1.18
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = THREE.PCFSoftShadowMap
 
@@ -49,23 +49,27 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   const camera = new THREE.PerspectiveCamera(32, window.innerWidth / window.innerHeight, 0.1, 40)
   camera.position.set(1.85, 1.15, 2.2)
 
-  // Neutral overcast only — the scan texture already holds the real lighting.
-  const hemi = new THREE.HemisphereLight('#f3efe8', '#e7dfd2', 1.15)
+  // Soft indoor window light, like the reference photos — bright and even, not glossy.
+  const hemi = new THREE.HemisphereLight('#fff8ef', '#eadfce', 1.85)
   scene.add(hemi)
 
-  const key = new THREE.DirectionalLight('#f7f2ea', 0.35)
-  key.position.set(2.2, 5.4, 1.6)
-  key.castShadow = true
-  key.shadow.mapSize.set(2048, 2048)
-  key.shadow.camera.near = 1
-  key.shadow.camera.far = 16
-  key.shadow.camera.left = -4
-  key.shadow.camera.right = 4
-  key.shadow.camera.top = 4
-  key.shadow.camera.bottom = -4
-  key.shadow.radius = 6
-  key.shadow.bias = -0.0002
-  scene.add(key)
+  const windowLight = new THREE.DirectionalLight('#fff6ea', 1.05)
+  windowLight.position.set(-3.2, 3.8, 2.4)
+  windowLight.castShadow = true
+  windowLight.shadow.mapSize.set(2048, 2048)
+  windowLight.shadow.camera.near = 1
+  windowLight.shadow.camera.far = 16
+  windowLight.shadow.camera.left = -4
+  windowLight.shadow.camera.right = 4
+  windowLight.shadow.camera.top = 4
+  windowLight.shadow.camera.bottom = -4
+  windowLight.shadow.radius = 8
+  windowLight.shadow.bias = -0.00015
+  scene.add(windowLight)
+
+  const bounce = new THREE.DirectionalLight('#f3ebe0', 0.55)
+  bounce.position.set(2.8, 1.8, -1.4)
+  scene.add(bounce)
 
   scene.add(createGround())
 

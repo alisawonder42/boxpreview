@@ -75,8 +75,9 @@ export function applyMeltMaterial(material: THREE.MeshStandardMaterial, uniforms
   material.userData.originalEnv = material.envMapIntensity
   if (material.map) {
     material.metalness = 0
-    material.roughness = Math.max(material.roughness, 0.88)
-    material.envMapIntensity = 0.15
+    material.roughness = Math.max(material.roughness, 0.92)
+    material.envMapIntensity = 0
+    material.color.set('#ffffff')
   }
   material.needsUpdate = true
 
@@ -128,7 +129,13 @@ export function applyMeltMaterial(material: THREE.MeshStandardMaterial, uniforms
       .replace(
         '#include <roughnessmap_fragment>',
         `#include <roughnessmap_fragment>
-        roughnessFactor = mix(roughnessFactor, 0.045, saturate(uMelt));`,
+        roughnessFactor = mix(roughnessFactor, 0.08, saturate(uMelt));`,
+      )
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+        // The KIRI albedo is darker than the real box. Lift it toward the photos.
+        diffuseColor.rgb = pow(max(diffuseColor.rgb, vec3(0.0)), vec3(0.78)) * 1.7;`,
       )
   }
 }
@@ -169,7 +176,7 @@ export function setMeltLook(root: THREE.Object3D, melt: number) {
       const baseRough = (mat.userData.originalRoughness as number | undefined) ?? 0.88
       const baseEnv = (mat.userData.originalEnv as number | undefined) ?? 0.15
       mat.roughness = THREE.MathUtils.lerp(Math.max(baseRough, 0.88), 0.12, melt)
-      mat.envMapIntensity = THREE.MathUtils.lerp(Math.min(baseEnv, 0.2), 0.9, melt)
+      mat.envMapIntensity = THREE.MathUtils.lerp(0, 0.55, melt)
       mat.metalness = 0
     }
   })

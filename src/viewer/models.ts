@@ -99,7 +99,7 @@ export function createGround() {
   const geo = new THREE.PlaneGeometry(18, 18)
   geo.rotateX(-Math.PI / 2)
   const mat = new THREE.MeshPhysicalMaterial({
-    color: '#efe8dc',
+    color: '#f6f1e8',
     roughness: 0.94,
     metalness: 0,
   })
