@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js'
 import {
   bindMeltBounds,
   createMeltUniforms,
@@ -38,7 +39,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   renderer.setSize(window.innerWidth, window.innerHeight)
   renderer.outputColorSpace = THREE.SRGBColorSpace
   renderer.toneMapping = THREE.ACESFilmicToneMapping
-  renderer.toneMappingExposure = 1.18
+  renderer.toneMappingExposure = 1.12
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = THREE.PCFSoftShadowMap
 
@@ -49,27 +50,34 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   const camera = new THREE.PerspectiveCamera(32, window.innerWidth / window.innerHeight, 0.1, 40)
   camera.position.set(1.85, 1.15, 2.2)
 
-  // Soft indoor window light, like the reference photos — bright and even, not glossy.
-  const hemi = new THREE.HemisphereLight('#fff8ef', '#eadfce', 1.85)
-  scene.add(hemi)
+  RectAreaLightUniformsLib.init()
 
-  const windowLight = new THREE.DirectionalLight('#fff6ea', 1.05)
-  windowLight.position.set(-3.2, 3.8, 2.4)
-  windowLight.castShadow = true
-  windowLight.shadow.mapSize.set(2048, 2048)
-  windowLight.shadow.camera.near = 1
-  windowLight.shadow.camera.far = 16
-  windowLight.shadow.camera.left = -4
-  windowLight.shadow.camera.right = 4
-  windowLight.shadow.camera.top = 4
-  windowLight.shadow.camera.bottom = -4
-  windowLight.shadow.radius = 8
-  windowLight.shadow.bias = -0.00015
-  scene.add(windowLight)
+  scene.add(new THREE.AmbientLight('#f6efe4', 0.7))
+  scene.add(new THREE.HemisphereLight('#fff8ef', '#e8dccb', 1.35))
 
-  const bounce = new THREE.DirectionalLight('#f3ebe0', 0.55)
-  bounce.position.set(2.8, 1.8, -1.4)
-  scene.add(bounce)
+  const windowPane = new THREE.RectAreaLight('#fff6ea', 7, 8, 5)
+  windowPane.position.set(-3.6, 2.6, 1.4)
+  windowPane.lookAt(0, 0.4, 0)
+  scene.add(windowPane)
+
+  const sky = new THREE.RectAreaLight('#fffaf3', 3.2, 10, 6)
+  sky.position.set(0.2, 5.2, 0.4)
+  sky.lookAt(0, 0.3, 0)
+  scene.add(sky)
+
+  const shadowOnly = new THREE.DirectionalLight('#fff6ea', 0.22)
+  shadowOnly.position.set(-2.4, 5.5, 2.2)
+  shadowOnly.castShadow = true
+  shadowOnly.shadow.mapSize.set(2048, 2048)
+  shadowOnly.shadow.camera.near = 1
+  shadowOnly.shadow.camera.far = 16
+  shadowOnly.shadow.camera.left = -4
+  shadowOnly.shadow.camera.right = 4
+  shadowOnly.shadow.camera.top = 4
+  shadowOnly.shadow.camera.bottom = -4
+  shadowOnly.shadow.radius = 14
+  shadowOnly.shadow.bias = -0.00012
+  scene.add(shadowOnly)
 
   scene.add(createGround())
 

@@ -174,7 +174,6 @@ export function setMeltLook(root: THREE.Object3D, melt: number) {
     for (const mat of mats) {
       if (!(mat instanceof THREE.MeshStandardMaterial)) continue
       const baseRough = (mat.userData.originalRoughness as number | undefined) ?? 0.88
-      const baseEnv = (mat.userData.originalEnv as number | undefined) ?? 0.15
       mat.roughness = THREE.MathUtils.lerp(Math.max(baseRough, 0.88), 0.12, melt)
       mat.envMapIntensity = THREE.MathUtils.lerp(0, 0.55, melt)
       mat.metalness = 0
