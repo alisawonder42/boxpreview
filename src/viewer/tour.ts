@@ -47,17 +47,37 @@ function unprojectOnPlane(ndc: THREE.Vector2, camera: THREE.Camera, y: number, t
 }
 
 export function viewportPerimeter(camera: THREE.Camera, y = TOUR.planeY) {
-  const pts = [
-    [-0.74, 0.58],
-    [0, 0.68],
-    [0.74, 0.58],
-    [0.84, 0.02],
-    [0.74, -0.56],
-    [0, -0.66],
-    [-0.74, -0.56],
-    [-0.84, 0.02],
-  ].map(([x, v]) => unprojectOnPlane(new THREE.Vector2(x, v), camera, y, new THREE.Vector3()))
-  return new THREE.CatmullRomCurve3(pts, true, 'catmullrom', 0.18)
+  const origin = new THREE.Vector3()
+  const left = new THREE.Vector3()
+  const rightPt = new THREE.Vector3()
+  const top = new THREE.Vector3()
+  const bot = new THREE.Vector3()
+  unprojectOnPlane(new THREE.Vector2(0, -0.04), camera, y, origin)
+  unprojectOnPlane(new THREE.Vector2(-0.9, 0.02), camera, y, left)
+  unprojectOnPlane(new THREE.Vector2(0.9, 0.02), camera, y, rightPt)
+  unprojectOnPlane(new THREE.Vector2(0, 0.78), camera, y, top)
+  unprojectOnPlane(new THREE.Vector2(0, -0.72), camera, y, bot)
+
+  const forward = new THREE.Vector3()
+  if (camera instanceof THREE.PerspectiveCamera) camera.getWorldDirection(forward)
+  else forward.set(0, 0, -1)
+  forward.y = 0
+  if (forward.lengthSq() < 1e-6) forward.set(0, 0, -1)
+  forward.normalize()
+  const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize()
+
+  const rx = Math.max(1.75, left.distanceTo(rightPt) * 0.5)
+  const rz = Math.max(1.15, top.distanceTo(bot) * 0.46)
+  const pts: THREE.Vector3[] = []
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2 - Math.PI / 2
+    const p = origin.clone()
+    p.addScaledVector(right, Math.cos(a) * rx)
+    p.addScaledVector(forward, Math.sin(a) * rz)
+    p.y = y
+    pts.push(p)
+  }
+  return new THREE.CatmullRomCurve3(pts, true, 'catmullrom', 0.12)
 }
 
 function nearestU(curve: THREE.CatmullRomCurve3, point: THREE.Vector3) {
