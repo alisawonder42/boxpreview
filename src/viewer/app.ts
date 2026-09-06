@@ -9,13 +9,12 @@ import {
 import {
   createGround,
   createPuddle,
-  createStand,
   createStandInBox,
   findBundledScan,
   firstAlbedo,
   loadScanFromUrl,
   prepareLoadedScan,
-  STAND_TOP,
+  FLOOR,
 } from './models'
 import { createDrips } from './drips'
 import { createPost } from './post'
@@ -49,7 +48,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   scene.fog = new THREE.Fog('#f4f1ea', 7, 16)
 
   const camera = new THREE.PerspectiveCamera(32, window.innerWidth / window.innerHeight, 0.1, 40)
-  camera.position.set(2.15, 1.62, 2.55)
+  camera.position.set(1.85, 1.15, 2.2)
 
   const pmrem = new THREE.PMREMGenerator(renderer)
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.03).texture
@@ -80,7 +79,6 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   scene.add(rim)
 
   scene.add(createGround())
-  scene.add(createStand())
 
   const uniforms = createMeltUniforms()
   let subject: THREE.Object3D = createStandInBox(uniforms)
@@ -126,7 +124,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   controls.maxPolarAngle = 1.42
   controls.autoRotate = !window.matchMedia('(prefers-reduced-motion: reduce)').matches
   controls.autoRotateSpeed = 0.45
-  controls.target.set(0, STAND_TOP + 0.38, 0)
+  controls.target.set(0, FLOOR + 0.42, 0)
   const home = {
     position: camera.position.clone(),
     target: controls.target.clone(),

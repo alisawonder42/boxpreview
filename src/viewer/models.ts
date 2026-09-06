@@ -5,7 +5,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { createAnimalPrintTexture } from '../textures/animalPrint'
 import { applyMeltMaterial, prepareMeltMesh, type MeltUniforms } from './melt'
 
-export const STAND_TOP = 0.78
+export const FLOOR = 0
 
 const SCAN_CANDIDATES = [
   './models/box.glb',
@@ -92,48 +92,17 @@ export function createStandInBox(uniforms: MeltUniforms) {
   return group
 }
 
-export function createStand() {
-  const group = new THREE.Group()
-  group.name = 'stand'
-
-  const plaster = new THREE.MeshPhysicalMaterial({
-    color: '#ece6da',
-    roughness: 0.82,
-    metalness: 0,
-  })
-  const column = new THREE.Mesh(new RoundedBoxGeometry(0.62, 0.7, 0.62, 3, 0.02), plaster)
-  column.position.y = 0.35
-  column.castShadow = true
-  column.receiveShadow = true
-  group.add(column)
-
-  const plate = new THREE.Mesh(
-    new RoundedBoxGeometry(0.72, 0.045, 0.72, 2, 0.01),
-    new THREE.MeshPhysicalMaterial({
-      color: '#8d7348',
-      metalness: 0.78,
-      roughness: 0.28,
-    }),
-  )
-  plate.position.y = STAND_TOP - 0.02
-  plate.castShadow = true
-  plate.receiveShadow = true
-  group.add(plate)
-
-  return group
-}
-
 export function createGround() {
-  const geo = new THREE.CircleGeometry(6.4, 80)
+  const geo = new THREE.PlaneGeometry(18, 18)
   geo.rotateX(-Math.PI / 2)
   const mat = new THREE.MeshPhysicalMaterial({
-    color: '#f0ebe1',
-    roughness: 0.92,
+    color: '#efe8dc',
+    roughness: 0.94,
     metalness: 0,
   })
   const mesh = new THREE.Mesh(geo, mat)
   mesh.receiveShadow = true
-  mesh.position.y = 0
+  mesh.position.y = FLOOR
   return mesh
 }
 
@@ -152,13 +121,13 @@ export function createPuddle(map: THREE.Texture | null) {
     }),
   )
   mesh.rotation.x = -Math.PI / 2
-  mesh.position.y = STAND_TOP + 0.012
+  mesh.position.y = FLOOR + 0.004
   mesh.receiveShadow = true
   mesh.visible = false
   return mesh
 }
 
-export function sitOnStand(object: THREE.Object3D, top = STAND_TOP) {
+export function sitOnFloor(object: THREE.Object3D, top = FLOOR) {
   object.updateMatrixWorld(true)
   const box = new THREE.Box3().setFromObject(object)
   const size = box.getSize(new THREE.Vector3())
@@ -177,7 +146,7 @@ export function prepareLoadedScan(root: THREE.Object3D, uniforms: MeltUniforms) 
   root.traverse((child) => {
     if (child instanceof THREE.Mesh) prepareMeltMesh(child, uniforms)
   })
-  sitOnStand(root)
+  sitOnFloor(root)
 }
 
 export function firstAlbedo(root: THREE.Object3D) {

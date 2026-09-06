@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { STAND_TOP } from './models'
+import { FLOOR } from './models'
 
 type Drop = {
   seed: number
@@ -62,5 +62,5 @@ export function createDrips(map: THREE.Texture | null, count = 56) {
     mat.needsUpdate = true
   }
 
-  return { mesh, update, setMap, originY: STAND_TOP + 0.42 }
+  return { mesh, update, setMap, originY: FLOOR + 0.42 }
 }
