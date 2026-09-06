@@ -51,8 +51,8 @@ export function createStandInBox(uniforms: MeltUniforms) {
     map,
     bumpMap: bump,
     bumpScale: 0.55,
-    roughness: 0.46,
-    metalness: 0.03,
+    roughness: 0.9,
+    metalness: 0,
     color: '#f3e6d2',
   })
   applyMeltMaterial(bodyMat, uniforms)

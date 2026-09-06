@@ -67,13 +67,17 @@ export function createMeltUniforms(): MeltUniforms {
   }
 }
 
-export function applyMeltMaterial(material: THREE.MeshPhysicalMaterial, uniforms: MeltUniforms) {
-  material.clearcoat = 0.18
-  material.clearcoatRoughness = 0.35
-  material.sheen = 0.15
-  material.sheenRoughness = 0.6
-  material.sheenColor.set('#c9a06a')
-  material.envMapIntensity = 1.15
+export function applyMeltMaterial(material: THREE.MeshStandardMaterial, uniforms: MeltUniforms) {
+  // Photogrammetry albedo already has the capture lighting in it.
+  // Extra gloss / environment makes the scan look like plastic.
+  material.userData.originalRoughness = material.roughness
+  material.userData.originalMetalness = material.metalness
+  material.userData.originalEnv = material.envMapIntensity
+  if (material.map) {
+    material.metalness = 0
+    material.roughness = Math.max(material.roughness, 0.88)
+    material.envMapIntensity = 0.15
+  }
   material.needsUpdate = true
 
   material.onBeforeCompile = (shader) => {
@@ -132,25 +136,17 @@ export function applyMeltMaterial(material: THREE.MeshPhysicalMaterial, uniforms
 export function prepareMeltMesh(mesh: THREE.Mesh, uniforms: MeltUniforms) {
   const sources = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
   const next = sources.map((source) => {
-    const physical =
-      source instanceof THREE.MeshPhysicalMaterial
+    const mat =
+      source instanceof THREE.MeshStandardMaterial
         ? source.clone()
-        : source instanceof THREE.MeshStandardMaterial
-          ? new THREE.MeshPhysicalMaterial({
-              map: source.map,
-              color: source.color,
-              roughness: source.roughness,
-              metalness: source.metalness,
-              normalMap: source.normalMap,
-              bumpMap: source.bumpMap,
-            })
-          : new THREE.MeshPhysicalMaterial({
-              color: '#c48a4a',
-              roughness: 0.42,
-              metalness: 0.04,
-            })
-    applyMeltMaterial(physical, uniforms)
-    return physical
+        : new THREE.MeshStandardMaterial({
+            color: source instanceof THREE.MeshBasicMaterial ? source.color : '#c48a4a',
+            map: source instanceof THREE.MeshBasicMaterial ? source.map : null,
+            roughness: 0.9,
+            metalness: 0,
+          })
+    applyMeltMaterial(mat, uniforms)
+    return mat
   })
   mesh.material = next.length === 1 ? next[0] : next
   mesh.castShadow = true
@@ -169,12 +165,12 @@ export function setMeltLook(root: THREE.Object3D, melt: number) {
     if (!(child instanceof THREE.Mesh)) return
     const mats = Array.isArray(child.material) ? child.material : [child.material]
     for (const mat of mats) {
-      if (!(mat instanceof THREE.MeshPhysicalMaterial)) continue
-      mat.clearcoat = THREE.MathUtils.lerp(0.18, 1, melt)
-      mat.clearcoatRoughness = THREE.MathUtils.lerp(0.35, 0.04, melt)
-      mat.envMapIntensity = THREE.MathUtils.lerp(1.15, 1.85, melt)
-      mat.ior = THREE.MathUtils.lerp(1.5, 1.33, melt)
-      mat.specularIntensity = THREE.MathUtils.lerp(1, 1.4, melt)
+      if (!(mat instanceof THREE.MeshStandardMaterial)) continue
+      const baseRough = (mat.userData.originalRoughness as number | undefined) ?? 0.88
+      const baseEnv = (mat.userData.originalEnv as number | undefined) ?? 0.15
+      mat.roughness = THREE.MathUtils.lerp(Math.max(baseRough, 0.88), 0.12, melt)
+      mat.envMapIntensity = THREE.MathUtils.lerp(Math.min(baseEnv, 0.2), 0.9, melt)
+      mat.metalness = 0
     }
   })
 }

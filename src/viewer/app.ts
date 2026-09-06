@@ -1,5 +1,4 @@
 import * as THREE from 'three'
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import {
   bindMeltBounds,
@@ -39,7 +38,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   renderer.setSize(window.innerWidth, window.innerHeight)
   renderer.outputColorSpace = THREE.SRGBColorSpace
   renderer.toneMapping = THREE.ACESFilmicToneMapping
-  renderer.toneMappingExposure = 1.08
+  renderer.toneMappingExposure = 0.86
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = THREE.PCFSoftShadowMap
 
@@ -50,33 +49,23 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   const camera = new THREE.PerspectiveCamera(32, window.innerWidth / window.innerHeight, 0.1, 40)
   camera.position.set(1.85, 1.15, 2.2)
 
-  const pmrem = new THREE.PMREMGenerator(renderer)
-  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.03).texture
-
-  const hemi = new THREE.HemisphereLight('#f4f1ea', '#d7c7ae', 0.62)
+  // Neutral overcast only — the scan texture already holds the real lighting.
+  const hemi = new THREE.HemisphereLight('#f3efe8', '#e7dfd2', 1.15)
   scene.add(hemi)
 
-  const sun = new THREE.DirectionalLight('#fff6e8', 2.15)
-  sun.position.set(3.4, 6.2, 2.2)
-  sun.castShadow = true
-  sun.shadow.mapSize.set(2048, 2048)
-  sun.shadow.camera.near = 1
-  sun.shadow.camera.far = 16
-  sun.shadow.camera.left = -4
-  sun.shadow.camera.right = 4
-  sun.shadow.camera.top = 4
-  sun.shadow.camera.bottom = -4
-  sun.shadow.radius = 3.2
-  sun.shadow.bias = -0.00025
-  scene.add(sun)
-
-  const fill = new THREE.DirectionalLight('#d9e4f2', 0.55)
-  fill.position.set(-3.2, 2.4, -1.6)
-  scene.add(fill)
-
-  const rim = new THREE.DirectionalLight('#fffaf2', 0.35)
-  rim.position.set(-1.2, 3.4, 4.2)
-  scene.add(rim)
+  const key = new THREE.DirectionalLight('#f7f2ea', 0.35)
+  key.position.set(2.2, 5.4, 1.6)
+  key.castShadow = true
+  key.shadow.mapSize.set(2048, 2048)
+  key.shadow.camera.near = 1
+  key.shadow.camera.far = 16
+  key.shadow.camera.left = -4
+  key.shadow.camera.right = 4
+  key.shadow.camera.top = 4
+  key.shadow.camera.bottom = -4
+  key.shadow.radius = 6
+  key.shadow.bias = -0.0002
+  scene.add(key)
 
   scene.add(createGround())
 
