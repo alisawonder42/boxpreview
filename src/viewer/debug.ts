@@ -88,6 +88,7 @@ export function attachDebugMenu(options: DebugOptions) {
   ).name('Reset animation')
 
   const diffuse = gui.addFolder('Diffuse')
+  diffuse.close()
   diffuse.add(state, 'ambient', 0, 3, 0.01).onChange((v: number) => {
     rig.ambient.intensity = v
   })
@@ -102,6 +103,7 @@ export function attachDebugMenu(options: DebugOptions) {
   })
 
   const direct = gui.addFolder('Direct')
+  direct.close()
   direct.add(state, 'direct', 0, 3, 0.01).name('sun / window').onChange((v: number) => {
     rig.direct.intensity = v
   })
@@ -113,6 +115,7 @@ export function attachDebugMenu(options: DebugOptions) {
   })
 
   const surface = gui.addFolder('Surface')
+  surface.close()
   surface.add(state, 'lift', 0.5, 2.6, 0.01).name('print lift').onChange((v: number) => {
     uniforms.uLift.value = v
   })
@@ -127,6 +130,7 @@ export function attachDebugMenu(options: DebugOptions) {
   })
 
   const motion = gui.addFolder('Motion')
+  motion.close()
   motion.add(state, 'autoRotate').onChange((v: boolean) => {
     controls.autoRotate = v
   })

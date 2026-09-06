@@ -92,7 +92,7 @@ export type MeltAnim = {
 
 export function createMeltAnim(): MeltAnim {
   return {
-    meltIn: 0.72,
+    meltIn: 0.42,
     meltOut: 2.4,
     ease: 1.22,
     sagEnd: 0.52,
