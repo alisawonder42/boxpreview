@@ -167,6 +167,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   let melt = 0
   let meltTarget = 0
   let meltedAway = false
+  let sequenceLock = false
   let holding = false
   let downOnSubject = false
   let dragged = false
@@ -187,12 +188,14 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     onPlay: () => {
       anim.scrubbing = false
       resetTour(tour)
+      sequenceLock = false
       meltedAway = true
       meltTarget = SPLASH_HOLD
     },
     onReform: () => {
       anim.scrubbing = false
       resetTour(tour)
+      sequenceLock = false
       meltedAway = false
       meltTarget = 0
     },
@@ -217,7 +220,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     down.set(event.clientX, event.clientY)
     downOnSubject = hitsSubject(event.clientX, event.clientY)
     dragged = false
-    holding = downOnSubject && !meltedAway && !isTouring(tour)
+    holding = downOnSubject && !meltedAway && !sequenceLock && !isTouring(tour)
     controls.autoRotate = false
     hideHint()
   })
@@ -230,15 +233,16 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   })
 
   const startSplashTour = () => {
-    if (isTouring(tour) || melt < SPLASH_HOLD * 0.72) return
+    if (sequenceLock || isTouring(tour) || melt < SPLASH_HOLD * 0.72) return
     anim.scrubbing = false
+    sequenceLock = true
     puddle.getWorldPosition(puddleHome)
     beginTour(tour, camera, puddleHome)
     controls.enabled = false
   }
 
   const endPointer = () => {
-    if (isTouring(tour)) {
+    if (sequenceLock || isTouring(tour)) {
       holding = false
       downOnSubject = false
       return
@@ -263,16 +267,17 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   })
 
   window.addEventListener('keydown', (event) => {
-    if (event.code === 'Space') {
-      event.preventDefault()
-      anim.scrubbing = false
-      meltedAway = true
-      meltTarget = SPLASH_HOLD
-      hideHint()
-    }
+    if (event.code !== 'Space') return
+    event.preventDefault()
+    if (sequenceLock || isTouring(tour)) return
+    anim.scrubbing = false
+    meltedAway = true
+    meltTarget = SPLASH_HOLD
+    hideHint()
   })
   window.addEventListener('keyup', (event) => {
-    if (event.code === 'Space') meltTarget = meltedAway ? SPLASH_HOLD : 0
+    if (event.code !== 'Space' || sequenceLock || isTouring(tour)) return
+    meltTarget = meltedAway ? SPLASH_HOLD : 0
   })
 
   reset?.addEventListener('click', () => {
@@ -280,6 +285,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     controls.target.copy(home.target)
     anim.scrubbing = false
     resetTour(tour)
+    sequenceLock = false
     carrier.position.set(0, 0, 0)
     uniforms.uTourOffset.value.set(0, 0, 0)
     uniforms.uCenter.value.copy(restCenter)
@@ -330,10 +336,13 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   const loop = () => {
     const dt = clock.getDelta()
     uniforms.uTime.value = clock.elapsedTime
-    if (holding && !isTouring(tour)) meltTarget = SPLASH_HOLD
+    if (holding && !sequenceLock && !isTouring(tour)) meltTarget = SPLASH_HOLD
     if (tour.playing && tickTour(tour, dt) === 'done') {
       meltedAway = false
       meltTarget = 0
+    }
+    if (sequenceLock && !tour.playing && meltTarget === 0 && melt < 0.008) {
+      sequenceLock = false
       controls.enabled = true
     }
 
@@ -383,7 +392,9 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     puddleMat.opacity = THREE.MathUtils.clamp(puddleIn * puddleOut * 0.9, 0, 0.9)
 
     if (hint) {
-      if (isTouring(tour)) hint.textContent = tour.returning ? 'Returning' : ''
+      if (tour.phase === 'falling') hint.textContent = ''
+      else if (isTouring(tour)) hint.textContent = ''
+      else if (sequenceLock) hint.textContent = ''
       else if (meltedAway) hint.textContent = 'Click the splash to send it around'
       else hint.textContent = melt > 0.12 ? 'Click to return' : 'Drag to turn · Click to unmake'
     }
