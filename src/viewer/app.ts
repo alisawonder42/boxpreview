@@ -303,6 +303,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     const shown = visualMelt(melt, anim.ease)
     uniforms.uMelt.value = shown
     setMeltLook(subject, shown, uniforms)
+    subject.visible = shown < anim.fadeEnd - 0.001
     post.setMeltBloom(shown)
 
     const box = new THREE.Box3().setFromObject(subject)
@@ -314,7 +315,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     const puddleMat = puddle.material as THREE.MeshPhysicalMaterial
     const puddleIn = THREE.MathUtils.smoothstep(anim.puddleInStart, anim.puddleInEnd, shown)
     const puddleOut = 1 - THREE.MathUtils.smoothstep(anim.puddleOutStart, anim.puddleOutEnd, shown)
-    puddle.visible = puddleIn * puddleOut > 0.02
+    puddle.visible = subject.visible && puddleIn * puddleOut > 0.02
     puddle.scale.setScalar(0.28 + puddleIn * 1.7)
     puddle.position.x = THREE.MathUtils.lerp(0, 1.15, THREE.MathUtils.smoothstep(anim.drainStart, anim.drainEnd, shown))
     puddle.position.z = THREE.MathUtils.lerp(0, -0.55, THREE.MathUtils.smoothstep(anim.drainStart, anim.drainEnd, shown))
