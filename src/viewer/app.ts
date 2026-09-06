@@ -49,7 +49,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   scene.fog = new THREE.Fog('#f4f1ea', 7, 16)
 
   const camera = new THREE.PerspectiveCamera(32, window.innerWidth / window.innerHeight, 0.1, 40)
-  camera.position.set(1.85, 1.15, 2.2)
+  camera.position.set(1.45, 0.95, 1.7)
 
   RectAreaLightUniformsLib.init()
 
@@ -115,9 +115,11 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     setSource(label)
   }
 
+  const anisotropy = renderer.capabilities.getMaxAnisotropy()
+
   const bundled = await findBundledScan()
   if (bundled) {
-    prepareLoadedScan(bundled.root, uniforms)
+    prepareLoadedScan(bundled.root, uniforms, anisotropy)
     replaceSubject(bundled.root, `Scan · ${bundled.url.replace('./models/', '')}`)
   }
 
@@ -125,7 +127,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   controls.enablePan = false
   controls.enableDamping = true
   controls.dampingFactor = 0.08
-  controls.minDistance = 1.6
+  controls.minDistance = 0.55
   controls.maxDistance = 4.6
   controls.minPolarAngle = 0.72
   controls.maxPolarAngle = 1.42
@@ -216,7 +218,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     setSource(`Loading ${file.name}…`)
     try {
       const root = await loadScanFromUrl(url, file.name)
-      prepareLoadedScan(root, uniforms)
+      prepareLoadedScan(root, uniforms, anisotropy)
       replaceSubject(root, `Scan · ${file.name}`)
     } catch (error) {
       setSource('Could not read that file')

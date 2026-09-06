@@ -150,7 +150,6 @@ export function applyMeltMaterial(material: THREE.MeshStandardMaterial, uniforms
 
 function textureFrom(source: THREE.Material) {
   if ('map' in source && source.map instanceof THREE.Texture) {
-    source.map.colorSpace = THREE.SRGBColorSpace
     return source.map
   }
   return null

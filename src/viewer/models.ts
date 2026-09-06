@@ -81,8 +81,7 @@ async function ensureFbxTexture(root: THREE.Object3D) {
   }
   if (!texture) return
 
-  texture.colorSpace = THREE.SRGBColorSpace
-  texture.flipY = false
+  configureScanTexture(texture)
   root.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return
     const mats = Array.isArray(child.material) ? child.material : [child.material]
@@ -233,12 +232,36 @@ export function sitOnFloor(object: THREE.Object3D, top = FLOOR) {
   object.position.y += top - seated.min.y
 }
 
-export function prepareLoadedScan(root: THREE.Object3D, uniforms: MeltUniforms) {
+export function configureScanTexture(map: THREE.Texture, anisotropy = 8) {
+  // FBX UVs are already top-left. TextureLoader defaults to flipY, which
+  // mismatches KIRI. Anisotropy keeps the 4K jpeg sharp at an angle.
+  map.colorSpace = THREE.SRGBColorSpace
+  map.flipY = false
+  map.anisotropy = Math.max(map.anisotropy, anisotropy)
+  map.generateMipmaps = true
+  map.minFilter = THREE.LinearMipmapLinearFilter
+  map.magFilter = THREE.LinearFilter
+  map.needsUpdate = true
+}
+
+export function prepareLoadedScan(
+  root: THREE.Object3D,
+  uniforms: MeltUniforms,
+  anisotropy = 8,
+) {
   root.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return
     child.visible = true
-    child.geometry.computeVertexNormals()
+    // KIRI writes reconstruction normals. Recomputing them on this
+    // non-indexed mesh makes one flat normal per triangle — the "simplified" look.
+    if (!child.geometry.getAttribute('normal')) child.geometry.computeVertexNormals()
     prepareMeltMesh(child, uniforms)
+    const mats = Array.isArray(child.material) ? child.material : [child.material]
+    for (const mat of mats) {
+      if ('map' in mat && mat.map instanceof THREE.Texture) {
+        configureScanTexture(mat.map, anisotropy)
+      }
+    }
   })
   sitOnFloor(root)
 }
