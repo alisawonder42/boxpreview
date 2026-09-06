@@ -3,7 +3,7 @@ import { FBXLoader } from 'three/addons/loaders/FBXLoader.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import { createAnimalPrintTexture } from '../textures/animalPrint'
-import { applyMeltMaterial, prepareMeltMesh, type MeltUniforms } from './melt'
+import { applyMeltMaterial, meltDepthMaterial, prepareMeltMesh, type MeltUniforms } from './melt'
 
 export const FLOOR = 0
 
@@ -166,6 +166,7 @@ export function createStandInBox(uniforms: MeltUniforms) {
     color: '#f3e6d2',
   })
   applyMeltMaterial(bodyMat, uniforms)
+  const depth = meltDepthMaterial(uniforms)
 
   const body = new THREE.Mesh(new RoundedBoxGeometry(1.28, 0.72, 0.86, 8, 0.045), bodyMat)
   body.position.y = 0.36
@@ -184,6 +185,7 @@ export function createStandInBox(uniforms: MeltUniforms) {
     roughness: 0.22,
     envMapIntensity: 1.4,
   })
+  applyMeltMaterial(metal, uniforms)
   const clasp = new THREE.Mesh(new RoundedBoxGeometry(0.16, 0.22, 0.05, 3, 0.012), metal)
   clasp.position.set(0, 0.7, 0.455)
   clasp.castShadow = true
@@ -201,6 +203,10 @@ export function createStandInBox(uniforms: MeltUniforms) {
     foot.castShadow = true
     group.add(foot)
   }
+
+  group.traverse((child) => {
+    if (child instanceof THREE.Mesh) child.customDepthMaterial = depth
+  })
 
   return group
 }

@@ -152,12 +152,14 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   let down = new THREE.Vector2()
   let hintGone = false
 
+  const ao = { blendIntensity: post.gtao.blendIntensity }
+
   attachDebugMenu({
     renderer,
     rig: { ambient, hemi, windowDiffuse, skyDiffuse, direct, fill },
     uniforms,
     anim,
-    gtao: post.gtao,
+    gtao: ao,
     controls,
     onPlay: () => {
       anim.scrubbing = false
@@ -299,13 +301,17 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     const shown = visualMelt(melt, anim.ease)
     uniforms.uMelt.value = shown
     setMeltLook(subject, shown, uniforms)
-    subject.visible = shown < anim.fadeEnd - 0.001
+    const present = shown < anim.fadeEnd - 0.001
+    subject.visible = present
+    direct.castShadow = present
     post.setMeltBloom(shown)
+    post.setMeltOcclusion(shown, ao.blendIntensity)
 
     const puddleMat = puddle.material as THREE.MeshPhysicalMaterial
     const puddleIn = THREE.MathUtils.smoothstep(anim.puddleInStart, anim.puddleInEnd, shown)
     const puddleOut = 1 - THREE.MathUtils.smoothstep(anim.puddleOutStart, anim.puddleOutEnd, shown)
-    puddle.visible = subject.visible && puddleIn * puddleOut > 0.02
+    puddle.visible = present && puddleIn * puddleOut > 0.02
+    puddle.castShadow = false
     puddle.scale.setScalar(0.28 + puddleIn * 1.7)
     puddle.position.x = THREE.MathUtils.lerp(0, 1.15, THREE.MathUtils.smoothstep(anim.drainStart, anim.drainEnd, shown))
     puddle.position.z = THREE.MathUtils.lerp(0, -0.55, THREE.MathUtils.smoothstep(anim.drainStart, anim.drainEnd, shown))
