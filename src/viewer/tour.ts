@@ -4,7 +4,7 @@ import * as THREE from 'three'
 export const SPLASH_HOLD = 0.62
 
 export const TOUR = {
-  crawlSeconds: 6.8,
+  crawlSeconds: 5.2,
   hangSeconds: 0.4,
   gravity: 12.5,
 }
