@@ -66,8 +66,8 @@ export function createMeltUniforms(): MeltUniforms {
     uCenter: { value: new THREE.Vector3() },
     uBoundsMin: { value: new THREE.Vector3(-0.5, 0, -0.5) },
     uBoundsMax: { value: new THREE.Vector3(0.5, 1, 0.5) },
-    uLift: { value: 1 },
-    uGamma: { value: 1 },
+    uLift: { value: 1.03 },
+    uGamma: { value: 0.76 },
   }
 }
 
@@ -163,14 +163,12 @@ export function prepareMeltMesh(mesh: THREE.Mesh, uniforms: MeltUniforms) {
   const sources = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
   const next = sources.map((source) => {
     const map = textureFrom(source)
-    // KIRI's viewer is the photo texture. Extra PBR lights turn the atlas
-    // into a muddy quilt. Keep the scan unlit; melt still displaces verts.
-    const mat = map
-      ? new THREE.MeshBasicMaterial({ color: '#ffffff', map, toneMapped: false })
-      : source instanceof THREE.MeshStandardMaterial
+    const mat =
+      source instanceof THREE.MeshStandardMaterial
         ? source.clone()
         : new THREE.MeshStandardMaterial({
             color: '#ffffff',
+            map,
             roughness: 0.92,
             metalness: 0,
           })

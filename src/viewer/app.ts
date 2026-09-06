@@ -40,7 +40,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   renderer.setSize(window.innerWidth, window.innerHeight)
   renderer.outputColorSpace = THREE.SRGBColorSpace
   renderer.toneMapping = THREE.ACESFilmicToneMapping
-  renderer.toneMappingExposure = 1.1
+  renderer.toneMappingExposure = 1.06
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = THREE.PCFSoftShadowMap
 
@@ -53,21 +53,21 @@ export async function startViewer(canvas: HTMLCanvasElement) {
 
   RectAreaLightUniformsLib.init()
 
-  const ambient = new THREE.AmbientLight('#f6efe4', 1.67)
+  const ambient = new THREE.AmbientLight('#f6efe4', 0)
   const hemi = new THREE.HemisphereLight('#fff8ef', '#e8dccb', 0)
   scene.add(ambient, hemi)
 
-  const windowDiffuse = new THREE.RectAreaLight('#fff6ea', 3.4, 8, 5)
+  const windowDiffuse = new THREE.RectAreaLight('#fff6ea', 0, 8, 5)
   windowDiffuse.position.set(-3.6, 2.6, 1.4)
   windowDiffuse.lookAt(0, 0.4, 0)
   scene.add(windowDiffuse)
 
-  const skyDiffuse = new THREE.RectAreaLight('#fffaf3', 0.6, 10, 6)
+  const skyDiffuse = new THREE.RectAreaLight('#fffaf3', 0, 10, 6)
   skyDiffuse.position.set(0.2, 5.2, 0.4)
   skyDiffuse.lookAt(0, 0.3, 0)
   scene.add(skyDiffuse)
 
-  const direct = new THREE.DirectionalLight('#fff6ea', 2.26)
+  const direct = new THREE.DirectionalLight('#fff6ea', 1.08)
   direct.position.set(-3.2, 3.8, 2.4)
   direct.castShadow = true
   direct.shadow.mapSize.set(2048, 2048)
@@ -77,11 +77,11 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   direct.shadow.camera.right = 4
   direct.shadow.camera.top = 4
   direct.shadow.camera.bottom = -4
-  direct.shadow.radius = 8
+  direct.shadow.radius = 6
   direct.shadow.bias = -0.00015
   scene.add(direct)
 
-  const fill = new THREE.DirectionalLight('#f3ebe0', 0)
+  const fill = new THREE.DirectionalLight('#f3ebe0', 1.21)
   fill.position.set(2.8, 1.8, -1.4)
   scene.add(fill)
 

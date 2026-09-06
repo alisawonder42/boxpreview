@@ -70,7 +70,7 @@ export function attachDebugMenu(options: DebugOptions) {
   })
 
   const surface = gui.addFolder('Surface')
-  surface.add(state, 'lift', 0.8, 2.6, 0.01).name('print lift').onChange((v: number) => {
+  surface.add(state, 'lift', 0.5, 2.6, 0.01).name('print lift').onChange((v: number) => {
     uniforms.uLift.value = v
   })
   surface.add(state, 'gamma', 0.5, 1.2, 0.01).name('print gamma').onChange((v: number) => {
