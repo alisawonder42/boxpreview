@@ -60,14 +60,13 @@ function fromNdc(ndc: THREE.Vector2, camera: THREE.Camera, home: THREE.Vector3, 
 /** NDC path around the viewport frame, ending at top-center. */
 function frameNdcPath() {
   const frame: Array<[number, number]> = [
-    [0.0, -0.62],
-    [-0.52, -0.7],
-    [-0.78, -0.42],
-    [-0.82, 0.08],
-    [-0.78, 0.48],
-    [-0.42, 0.7],
-    [-0.12, 0.66],
-    [0.0, 0.68],
+    [0.0, -0.55],
+    [-0.42, -0.62],
+    [-0.68, -0.28],
+    [-0.72, 0.12],
+    [-0.62, 0.42],
+    [-0.28, 0.55],
+    [0.0, 0.56],
   ]
   const pts = frame.map(([x, y]) => new THREE.Vector3(x, y, 0))
   return new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.12)
@@ -115,7 +114,7 @@ export function tickTour(tour: TourState, dt: number, camera: THREE.Camera): 'cr
     )
     place()
     if (tour.distance >= 1) {
-      tour.ndc.set(0, 0.68)
+      tour.ndc.set(0, 0.56)
       place()
       tour.phase = 'hanging'
       tour.hangT = 0
@@ -124,7 +123,7 @@ export function tickTour(tour: TourState, dt: number, camera: THREE.Camera): 'cr
   }
 
   if (tour.phase === 'hanging') {
-    tour.ndc.set(0, 0.68)
+    tour.ndc.set(0, 0.56)
     place()
     tour.hangT += dt
     if (tour.hangT >= TOUR.hangSeconds) {

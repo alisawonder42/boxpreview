@@ -342,7 +342,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   })
 
   const loop = () => {
-    const dt = clock.getDelta()
+    const dt = Math.min(clock.getDelta(), 1 / 24)
     uniforms.uTime.value = clock.elapsedTime
     if (holding && !sequenceLock && !isTouring(tour)) meltTarget = SPLASH_HOLD
     if (tour.playing && tickTour(tour, dt, camera) === 'done') {
@@ -401,6 +401,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
 
     canvas.dataset.phase = tour.playing ? tour.phase : meltedAway ? 'splash' : 'box'
     canvas.dataset.lock = sequenceLock || isTouring(tour) ? '1' : '0'
+    canvas.dataset.ndc = `${tour.ndc.x.toFixed(2)},${tour.ndc.y.toFixed(2)}`
 
     if (hint) {
       if (tour.phase === 'falling') hint.textContent = ''
