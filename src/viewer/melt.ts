@@ -66,6 +66,7 @@ export type MeltUniforms = {
   uFadeEnd: { value: number }
   uSpread: { value: number }
   uDrainTravel: { value: number }
+  uTourOffset: { value: THREE.Vector3 }
 }
 
 /** Live timing for the melt. Stages are 0–1 windows along melt progress. */
@@ -132,6 +133,7 @@ export function createMeltUniforms(): MeltUniforms {
     uFadeEnd: { value: anim.fadeEnd },
     uSpread: { value: anim.spread },
     uDrainTravel: { value: anim.drainTravel },
+    uTourOffset: { value: new THREE.Vector3() },
   }
 }
 
@@ -164,6 +166,7 @@ uniform float uDrainStart;
 uniform float uDrainEnd;
 uniform float uSpread;
 uniform float uDrainTravel;
+uniform vec3 uTourOffset;
 ${NOISE}
 `
 
@@ -189,6 +192,7 @@ const MELT_VERTEX_BODY = /* glsl */ `
   away = awayLen > 0.0001 ? away / awayLen : vec2(0.55, -0.22);
   world.xz += away * drain * (uDrainTravel + n2 * 0.35);
   world.y -= drain * (0.28 + 0.7 * awayLen);
+  world += uTourOffset;
   transformed = (inverse(modelMatrix) * vec4(world, 1.0)).xyz;
 }
 `
@@ -216,6 +220,7 @@ function bindMeltShaderUniforms(shader: ShaderWithUniforms, uniforms: MeltUnifor
   shader.uniforms.uFadeEnd = uniforms.uFadeEnd
   shader.uniforms.uSpread = uniforms.uSpread
   shader.uniforms.uDrainTravel = uniforms.uDrainTravel
+  shader.uniforms.uTourOffset = uniforms.uTourOffset
 }
 
 function injectMeltVertex(shader: ShaderWithUniforms) {

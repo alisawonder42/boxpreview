@@ -21,6 +21,7 @@ import {
 } from './models'
 import { createPost } from './post'
 import { attachDebugMenu } from './debug'
+import { beginTour, createTour, isTouring, resetTour, SPLASH_HOLD, tickTour } from './tour'
 
 const MOVE_PX = 7
 
@@ -92,12 +93,27 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   const uniforms = createMeltUniforms()
   const anim = createMeltAnim()
   applyMeltAnim(uniforms, anim)
+  const carrier = new THREE.Group()
+  carrier.name = 'tour-carrier'
+  scene.add(carrier)
+
   let subject: THREE.Object3D = createStandInBox(uniforms)
-  scene.add(subject)
+  carrier.add(subject)
   bindMeltBounds(subject, uniforms)
+  const restCenter = uniforms.uCenter.value.clone()
+  const restMin = uniforms.uBoundsMin.value.clone()
+  const restMax = uniforms.uBoundsMax.value.clone()
+  const captureRest = () => {
+    restCenter.copy(uniforms.uCenter.value)
+    restMin.copy(uniforms.uBoundsMin.value)
+    restMax.copy(uniforms.uBoundsMax.value)
+  }
+  captureRest()
 
   let puddle = createPuddle(firstAlbedo(subject))
-  scene.add(puddle)
+  carrier.add(puddle)
+
+  const tour = createTour()
 
   const setSource = (text: string) => {
     if (source) source.textContent = text
@@ -105,14 +121,18 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   setSource('Stand-in box — drop your scan to replace it')
 
   const replaceSubject = (next: THREE.Object3D, label: string) => {
-    if (subject.parent) scene.remove(subject)
+    if (subject.parent) subject.parent.remove(subject)
     subject = next
-    scene.add(subject)
+    carrier.add(subject)
     bindMeltBounds(subject, uniforms)
+    captureRest()
     const map = firstAlbedo(subject)
-    scene.remove(puddle)
+    if (puddle.parent) puddle.parent.remove(puddle)
     puddle = createPuddle(map)
-    scene.add(puddle)
+    carrier.add(puddle)
+    resetTour(tour)
+    carrier.position.set(0, 0, 0)
+    uniforms.uTourOffset.value.set(0, 0, 0)
     setSource(label)
   }
 
@@ -153,6 +173,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   let pointer = new THREE.Vector2()
   let down = new THREE.Vector2()
   let hintGone = false
+  const puddleHome = new THREE.Vector3()
 
   const ao = { blendIntensity: post.gtao.blendIntensity }
 
@@ -165,11 +186,13 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     controls,
     onPlay: () => {
       anim.scrubbing = false
+      resetTour(tour)
       meltedAway = true
-      meltTarget = 1
+      meltTarget = SPLASH_HOLD
     },
     onReform: () => {
       anim.scrubbing = false
+      resetTour(tour)
       meltedAway = false
       meltTarget = 0
     },
@@ -180,7 +203,8 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     pointer.x = (clientX / window.innerWidth) * 2 - 1
     pointer.y = -(clientY / window.innerHeight) * 2 + 1
     raycaster.setFromCamera(pointer, camera)
-    return raycaster.intersectObject(subject, true).length > 0
+    if (raycaster.intersectObject(subject, true).length > 0) return true
+    return puddle.visible && raycaster.intersectObject(puddle, true).length > 0
   }
 
   const hideHint = () => {
@@ -193,7 +217,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     down.set(event.clientX, event.clientY)
     downOnSubject = hitsSubject(event.clientX, event.clientY)
     dragged = false
-    holding = downOnSubject && !meltedAway
+    holding = downOnSubject && !meltedAway && !isTouring(tour)
     controls.autoRotate = false
     hideHint()
   })
@@ -205,15 +229,26 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     }
   })
 
+  const startSplashTour = () => {
+    if (isTouring(tour) || melt < SPLASH_HOLD * 0.72) return
+    anim.scrubbing = false
+    puddle.getWorldPosition(puddleHome)
+    beginTour(tour, camera, puddleHome)
+    controls.enabled = false
+  }
+
   const endPointer = () => {
-    if (!dragged && downOnSubject) {
+    if (isTouring(tour)) {
+      holding = false
+      downOnSubject = false
+      return
+    }
+    if (!dragged && downOnSubject && !meltedAway) {
       anim.scrubbing = false
-      meltedAway = !meltedAway
-      meltTarget = meltedAway ? 1 : 0
+      meltedAway = true
+      meltTarget = SPLASH_HOLD
     } else if (!dragged && meltedAway) {
-      anim.scrubbing = false
-      meltedAway = false
-      meltTarget = 0
+      startSplashTour()
     }
     holding = false
     downOnSubject = false
@@ -231,18 +266,26 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     if (event.code === 'Space') {
       event.preventDefault()
       anim.scrubbing = false
-      meltTarget = 1
+      meltedAway = true
+      meltTarget = SPLASH_HOLD
       hideHint()
     }
   })
   window.addEventListener('keyup', (event) => {
-    if (event.code === 'Space') meltTarget = meltedAway ? 1 : 0
+    if (event.code === 'Space') meltTarget = meltedAway ? SPLASH_HOLD : 0
   })
 
   reset?.addEventListener('click', () => {
     camera.position.copy(home.position)
     controls.target.copy(home.target)
     anim.scrubbing = false
+    resetTour(tour)
+    carrier.position.set(0, 0, 0)
+    uniforms.uTourOffset.value.set(0, 0, 0)
+    uniforms.uCenter.value.copy(restCenter)
+    uniforms.uBoundsMin.value.copy(restMin)
+    uniforms.uBoundsMax.value.copy(restMax)
+    controls.enabled = true
     melt = 0
     meltTarget = 0
     meltedAway = false
@@ -287,28 +330,39 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   const loop = () => {
     const dt = clock.getDelta()
     uniforms.uTime.value = clock.elapsedTime
-    if (holding) meltTarget = 1
+    if (holding && !isTouring(tour)) meltTarget = SPLASH_HOLD
+    if (tour.playing && tickTour(tour, dt) === 'done') {
+      meltedAway = false
+      meltTarget = 0
+      controls.enabled = true
+    }
+
     if (anim.scrubbing) {
       melt = anim.progress
       meltTarget = anim.progress
       meltedAway = anim.progress > 0.85
-    } else {
+    } else if (!isTouring(tour)) {
       const rate = meltTarget > melt ? anim.meltIn : anim.meltOut
       melt = THREE.MathUtils.damp(melt, meltTarget, rate, dt)
-      if (meltTarget === 1 && melt > 0.992) melt = 1
+      if (meltTarget === SPLASH_HOLD && Math.abs(melt - SPLASH_HOLD) < 0.008) melt = SPLASH_HOLD
       if (meltTarget === 0 && melt < 0.008) melt = 0
       anim.progress = melt
     }
     applyMeltAnim(uniforms, anim)
     const shown = visualMelt(melt, anim.ease)
     uniforms.uMelt.value = shown
+    uniforms.uTourOffset.value.copy(tour.offset)
+    carrier.position.copy(tour.offset)
+    uniforms.uCenter.value.copy(restCenter).add(tour.offset)
+    uniforms.uBoundsMin.value.copy(restMin).add(tour.offset)
+    uniforms.uBoundsMax.value.copy(restMax).add(tour.offset)
     setMeltLook(subject, shown, uniforms)
     const faded = 1 - THREE.MathUtils.smoothstep(anim.fadeStart, anim.fadeEnd, shown)
-    const present = faded > 0.04
-    const solid = shown < 0.05
+    const present = faded > 0.04 || isTouring(tour)
+    const solid = shown < 0.05 && !isTouring(tour)
     subject.visible = present
-    if (present && !subject.parent) scene.add(subject)
-    if (!present && subject.parent) scene.remove(subject)
+    if (present && !subject.parent) carrier.add(subject)
+    if (!present && subject.parent) subject.parent.remove(subject)
     // Default depth still sees the undeformed scan. Kill the solid-box
     // shadow as soon as the melt starts so it cannot linger.
     direct.castShadow = solid
@@ -324,11 +378,14 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     puddle.castShadow = false
     puddle.scale.setScalar(0.28 + puddleIn * 1.7)
     puddle.position.x = THREE.MathUtils.lerp(0, 1.15, THREE.MathUtils.smoothstep(anim.drainStart, anim.drainEnd, shown))
+    puddle.position.y = FLOOR + 0.004
     puddle.position.z = THREE.MathUtils.lerp(0, -0.55, THREE.MathUtils.smoothstep(anim.drainStart, anim.drainEnd, shown))
     puddleMat.opacity = THREE.MathUtils.clamp(puddleIn * puddleOut * 0.9, 0, 0.9)
 
     if (hint) {
-      hint.textContent = melt > 0.12 ? 'Click to return' : 'Drag to turn · Click to unmake'
+      if (isTouring(tour)) hint.textContent = tour.returning ? 'Returning' : ''
+      else if (meltedAway) hint.textContent = 'Click the splash to send it around'
+      else hint.textContent = melt > 0.12 ? 'Click to return' : 'Drag to turn · Click to unmake'
     }
 
     controls.update()
