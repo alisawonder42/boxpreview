@@ -16,9 +16,6 @@ export function parseRoute(pathname: string, hash: string): Route {
   const segments = pathname.replace(/^\/+|\/+$/g, '').split('/')
   if (segments[0] === '') return { name: 'home' }
   if (segments[0] === 'cv') return { name: 'cv' }
-  if (segments[0] === 'projects' && segments[1] && segments[2]) {
-    return { name: 'project', slug: segments[2] }
-  }
   if (segments[0] === 'projects' && segments[1]) return { name: 'project', slug: segments[1] }
   return { name: 'notFound' }
 }

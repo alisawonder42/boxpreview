@@ -19,32 +19,8 @@
   transition: border-color var(--dur) var(--ease-out);
 }
 
-.item:last-child .row:last-of-type,
-.item:last-child .childRow:last-child {
+.item:last-child .row {
   border-bottom: 1px solid var(--line);
-}
-
-.children {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.childRow {
-  display: grid;
-  grid-template-columns: 2.5rem 1fr auto;
-  align-items: baseline;
-  gap: var(--space-4);
-  padding: 0.85rem 0 1.15rem;
-  margin-left: 0;
-  border-top: 1px solid transparent;
-  transition: border-color var(--dur) var(--ease-out);
-}
-
-.childMark {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--fg-faint);
 }
 
 .index {
@@ -96,9 +72,7 @@
   }
 
   .row:hover .title,
-  .row:hover .type,
-  .childRow:hover .title,
-  .childRow:hover .type {
+  .row:hover .type {
     transform: translateX(6px);
   }
 
@@ -106,16 +80,14 @@
     color: var(--fg-muted);
   }
 
-  .row:hover .arrow,
-  .childRow:hover .arrow {
+  .row:hover .arrow {
     opacity: 1;
     color: var(--fg);
     transform: translate(2px, -2px);
   }
 }
 
-.row:focus-visible,
-.childRow:focus-visible {
+.row:focus-visible {
   outline: 1.5px solid var(--fg);
   outline-offset: 4px;
 }

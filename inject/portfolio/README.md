@@ -14,6 +14,6 @@ That copies the page sources, builds this viewer, and writes it to
 
 Result:
 
-- Listed under **FLAT** on the project index
-- Page at `/projects/flat/the-box`
+- Project index: **FLAT**, **Box**, **ShrinkMe**, …
+- Page at `/projects/box`
 - Short copy + full-width embed (`/box/index.html?embed=1`)
