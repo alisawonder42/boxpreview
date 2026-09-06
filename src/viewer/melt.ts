@@ -166,7 +166,7 @@ export function prepareMeltMesh(mesh: THREE.Mesh, uniforms: MeltUniforms) {
     // KIRI's viewer is the photo texture. Extra PBR lights turn the atlas
     // into a muddy quilt. Keep the scan unlit; melt still displaces verts.
     const mat = map
-      ? new THREE.MeshBasicMaterial({ color: '#ffffff', map, toneMapped: true })
+      ? new THREE.MeshBasicMaterial({ color: '#ffffff', map, toneMapped: false })
       : source instanceof THREE.MeshStandardMaterial
         ? source.clone()
         : new THREE.MeshStandardMaterial({
