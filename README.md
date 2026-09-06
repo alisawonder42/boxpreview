@@ -21,6 +21,17 @@ Production build: `npm run build`. Preview it with `npm run preview`.
 
 The viewer loads **`BoxModel.fbx`** and its print (`3DModel.fbm/3DModel.jpg`). You can also drag another `.fbx` onto the page.
 
+## GitHub Pages
+
+The site builds in Actions, then deploys with `deploy-pages`. That step 404s until Pages is turned on once:
+
+1. Open [Settings → Pages](https://github.com/alisawonder42/boxpreview/settings/pages)
+2. Under **Build and deployment → Source**, choose **GitHub Actions**
+3. Re-run the latest **pages** workflow on `main` (Actions → pages → Run workflow)
+
+After that, the viewer is at `https://alisawonder42.github.io/boxpreview/`  
+Embed: `https://alisawonder42.github.io/boxpreview/?embed=1`
+
 ## Live preview
 
 Temporary Vercel deploy with your `Box-cleaned.glb` scan (claim it to keep it):
