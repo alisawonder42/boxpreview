@@ -151,6 +151,103 @@ export function visualMelt(progress: number, ease: number) {
   return Math.pow(THREE.MathUtils.clamp(progress, 0, 1), Math.max(0.2, ease))
 }
 
+const MELT_VERTEX_UNIFORMS = /* glsl */ `
+uniform float uMelt;
+uniform float uTime;
+uniform vec3 uCenter;
+uniform vec3 uBoundsMin;
+uniform vec3 uBoundsMax;
+uniform float uSagEnd;
+uniform float uFlattenStart;
+uniform float uFlattenEnd;
+uniform float uDrainStart;
+uniform float uDrainEnd;
+uniform float uSpread;
+uniform float uDrainTravel;
+${NOISE}
+`
+
+const MELT_VERTEX_BODY = /* glsl */ `
+{
+  float melt = saturate(uMelt);
+  vec3 world = (modelMatrix * vec4(position, 1.0)).xyz;
+  float span = max(0.0001, uBoundsMax.y - uBoundsMin.y);
+  float height01 = saturate((world.y - uBoundsMin.y) / span);
+  float n = snoise(world * 3.1 + vec3(0.0, uTime * 0.55, 0.0));
+  float n2 = snoise(world * 6.4 + 19.0 + uTime * 0.2);
+  float sag = smoothstep(0.0, max(0.001, uSagEnd), melt);
+  float flatten = smoothstep(uFlattenStart, max(uFlattenStart + 0.001, uFlattenEnd), melt);
+  float drain = smoothstep(uDrainStart, max(uDrainStart + 0.001, uDrainEnd), melt);
+  float floorY = uBoundsMin.y;
+  world.y = mix(world.y, floorY + 0.018 + n * 0.025, sag * (0.2 + 0.8 * height01));
+  world.y = mix(world.y, floorY + 0.01 + abs(n) * 0.016, flatten);
+  vec2 from = world.xz - uCenter.xz;
+  world.xz = uCenter.xz + from * mix(1.0, uSpread + n * 0.18, flatten);
+  world.xz += vec2(n, n2) * flatten * 0.06 * span;
+  vec2 away = from;
+  float awayLen = length(away);
+  away = awayLen > 0.0001 ? away / awayLen : vec2(0.55, -0.22);
+  world.xz += away * drain * (uDrainTravel + n2 * 0.35);
+  world.y -= drain * (0.28 + 0.7 * awayLen);
+  transformed = (inverse(modelMatrix) * vec4(world, 1.0)).xyz;
+}
+`
+
+type ShaderWithUniforms = {
+  uniforms: Record<string, { value: unknown }>
+  vertexShader: string
+  fragmentShader?: string
+}
+
+function bindMeltShaderUniforms(shader: ShaderWithUniforms, uniforms: MeltUniforms) {
+  shader.uniforms.uMelt = uniforms.uMelt
+  shader.uniforms.uTime = uniforms.uTime
+  shader.uniforms.uCenter = uniforms.uCenter
+  shader.uniforms.uBoundsMin = uniforms.uBoundsMin
+  shader.uniforms.uBoundsMax = uniforms.uBoundsMax
+  shader.uniforms.uLift = uniforms.uLift
+  shader.uniforms.uGamma = uniforms.uGamma
+  shader.uniforms.uSagEnd = uniforms.uSagEnd
+  shader.uniforms.uFlattenStart = uniforms.uFlattenStart
+  shader.uniforms.uFlattenEnd = uniforms.uFlattenEnd
+  shader.uniforms.uDrainStart = uniforms.uDrainStart
+  shader.uniforms.uDrainEnd = uniforms.uDrainEnd
+  shader.uniforms.uFadeStart = uniforms.uFadeStart
+  shader.uniforms.uFadeEnd = uniforms.uFadeEnd
+  shader.uniforms.uSpread = uniforms.uSpread
+  shader.uniforms.uDrainTravel = uniforms.uDrainTravel
+}
+
+function injectMeltVertex(shader: ShaderWithUniforms) {
+  shader.vertexShader = shader.vertexShader
+    .replace(
+      '#include <common>',
+      `#include <common>
+      ${MELT_VERTEX_UNIFORMS}`,
+    )
+    .replace(
+      '#include <begin_vertex>',
+      `#include <begin_vertex>
+      ${MELT_VERTEX_BODY}`,
+    )
+}
+
+const depthMaterials = new WeakMap<MeltUniforms, THREE.MeshDepthMaterial>()
+
+export function meltDepthMaterial(uniforms: MeltUniforms) {
+  const existing = depthMaterials.get(uniforms)
+  if (existing) return existing
+  const mat = new THREE.MeshDepthMaterial({
+    depthPacking: THREE.RGBADepthPacking,
+  })
+  mat.onBeforeCompile = (shader) => {
+    bindMeltShaderUniforms(shader, uniforms)
+    injectMeltVertex(shader)
+  }
+  depthMaterials.set(uniforms, mat)
+  return mat
+}
+
 export function applyMeltMaterial(
   material: THREE.MeshStandardMaterial | THREE.MeshBasicMaterial,
   uniforms: MeltUniforms,
@@ -170,68 +267,8 @@ export function applyMeltMaterial(
   material.needsUpdate = true
 
   material.onBeforeCompile = (shader) => {
-    shader.uniforms.uMelt = uniforms.uMelt
-    shader.uniforms.uTime = uniforms.uTime
-    shader.uniforms.uCenter = uniforms.uCenter
-    shader.uniforms.uBoundsMin = uniforms.uBoundsMin
-    shader.uniforms.uBoundsMax = uniforms.uBoundsMax
-    shader.uniforms.uLift = uniforms.uLift
-    shader.uniforms.uGamma = uniforms.uGamma
-    shader.uniforms.uSagEnd = uniforms.uSagEnd
-    shader.uniforms.uFlattenStart = uniforms.uFlattenStart
-    shader.uniforms.uFlattenEnd = uniforms.uFlattenEnd
-    shader.uniforms.uDrainStart = uniforms.uDrainStart
-    shader.uniforms.uDrainEnd = uniforms.uDrainEnd
-    shader.uniforms.uFadeStart = uniforms.uFadeStart
-    shader.uniforms.uFadeEnd = uniforms.uFadeEnd
-    shader.uniforms.uSpread = uniforms.uSpread
-    shader.uniforms.uDrainTravel = uniforms.uDrainTravel
-
-    shader.vertexShader = shader.vertexShader
-      .replace(
-        '#include <common>',
-        `#include <common>
-        uniform float uMelt;
-        uniform float uTime;
-        uniform vec3 uCenter;
-        uniform vec3 uBoundsMin;
-        uniform vec3 uBoundsMax;
-        uniform float uSagEnd;
-        uniform float uFlattenStart;
-        uniform float uFlattenEnd;
-        uniform float uDrainStart;
-        uniform float uDrainEnd;
-        uniform float uSpread;
-        uniform float uDrainTravel;
-        ${NOISE}`,
-      )
-      .replace(
-        '#include <begin_vertex>',
-        `#include <begin_vertex>
-        {
-          float melt = saturate(uMelt);
-          vec3 world = (modelMatrix * vec4(position, 1.0)).xyz;
-          float span = max(0.0001, uBoundsMax.y - uBoundsMin.y);
-          float height01 = saturate((world.y - uBoundsMin.y) / span);
-          float n = snoise(world * 3.1 + vec3(0.0, uTime * 0.55, 0.0));
-          float n2 = snoise(world * 6.4 + 19.0 + uTime * 0.2);
-          float sag = smoothstep(0.0, max(0.001, uSagEnd), melt);
-          float flatten = smoothstep(uFlattenStart, max(uFlattenStart + 0.001, uFlattenEnd), melt);
-          float drain = smoothstep(uDrainStart, max(uDrainStart + 0.001, uDrainEnd), melt);
-          float floorY = uBoundsMin.y;
-          world.y = mix(world.y, floorY + 0.018 + n * 0.025, sag * (0.2 + 0.8 * height01));
-          world.y = mix(world.y, floorY + 0.01 + abs(n) * 0.016, flatten);
-          vec2 from = world.xz - uCenter.xz;
-          world.xz = uCenter.xz + from * mix(1.0, uSpread + n * 0.18, flatten);
-          world.xz += vec2(n, n2) * flatten * 0.06 * span;
-          vec2 away = from;
-          float awayLen = length(away);
-          away = awayLen > 0.0001 ? away / awayLen : vec2(0.55, -0.22);
-          world.xz += away * drain * (uDrainTravel + n2 * 0.35);
-          world.y -= drain * (0.28 + 0.7 * awayLen);
-          transformed = (inverse(modelMatrix) * vec4(world, 1.0)).xyz;
-        }`,
-      )
+    bindMeltShaderUniforms(shader, uniforms)
+    injectMeltVertex(shader)
 
     shader.fragmentShader = shader.fragmentShader
       .replace(
@@ -281,6 +318,7 @@ export function prepareMeltMesh(mesh: THREE.Mesh, uniforms: MeltUniforms) {
     return mat
   })
   mesh.material = next.length === 1 ? next[0] : next
+  mesh.customDepthMaterial = meltDepthMaterial(uniforms)
   mesh.castShadow = true
   mesh.receiveShadow = true
 }

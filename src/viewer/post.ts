@@ -35,5 +35,10 @@ export function createPost(
     bloom.strength = melt * 0.28
   }
 
-  return { composer, resize, setMeltBloom, gtao }
+  const setMeltOcclusion = (melt: number, ao = 1) => {
+    // GTAO uses an undeformed MeshNormalMaterial, so it would keep a box ghost.
+    gtao.blendIntensity = ao * (1 - THREE.MathUtils.smoothstep(0.06, 0.4, melt))
+  }
+
+  return { composer, resize, setMeltBloom, setMeltOcclusion, gtao }
 }

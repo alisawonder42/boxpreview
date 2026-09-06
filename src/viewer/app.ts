@@ -86,7 +86,8 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   fill.position.set(2.8, 1.8, -1.4)
   scene.add(fill)
 
-  scene.add(createGround())
+  const ground = createGround()
+  scene.add(ground)
 
   const uniforms = createMeltUniforms()
   const anim = createMeltAnim()
@@ -104,7 +105,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   setSource('Stand-in box — drop your scan to replace it')
 
   const replaceSubject = (next: THREE.Object3D, label: string) => {
-    scene.remove(subject)
+    if (subject.parent) scene.remove(subject)
     subject = next
     scene.add(subject)
     bindMeltBounds(subject, uniforms)
@@ -152,12 +153,14 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   let down = new THREE.Vector2()
   let hintGone = false
 
+  const ao = { blendIntensity: post.gtao.blendIntensity }
+
   attachDebugMenu({
     renderer,
     rig: { ambient, hemi, windowDiffuse, skyDiffuse, direct, fill },
     uniforms,
     anim,
-    gtao: post.gtao,
+    gtao: ao,
     controls,
     onPlay: () => {
       anim.scrubbing = false
@@ -299,13 +302,25 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     const shown = visualMelt(melt, anim.ease)
     uniforms.uMelt.value = shown
     setMeltLook(subject, shown, uniforms)
-    subject.visible = shown < anim.fadeEnd - 0.001
-    post.setMeltBloom(shown)
+    const faded = 1 - THREE.MathUtils.smoothstep(anim.fadeStart, anim.fadeEnd, shown)
+    const present = faded > 0.04
+    const solid = shown < 0.05
+    subject.visible = present
+    if (present && !subject.parent) scene.add(subject)
+    if (!present && subject.parent) scene.remove(subject)
+    // Default depth still sees the undeformed scan. Kill the solid-box
+    // shadow as soon as the melt starts so it cannot linger.
+    direct.castShadow = solid
+    ground.receiveShadow = solid
+    post.gtao.enabled = solid
+    post.setMeltBloom(present ? shown : 0)
+    post.setMeltOcclusion(shown, ao.blendIntensity)
 
     const puddleMat = puddle.material as THREE.MeshPhysicalMaterial
     const puddleIn = THREE.MathUtils.smoothstep(anim.puddleInStart, anim.puddleInEnd, shown)
     const puddleOut = 1 - THREE.MathUtils.smoothstep(anim.puddleOutStart, anim.puddleOutEnd, shown)
-    puddle.visible = subject.visible && puddleIn * puddleOut > 0.02
+    puddle.visible = present && puddleIn * puddleOut > 0.02
+    puddle.castShadow = false
     puddle.scale.setScalar(0.28 + puddleIn * 1.7)
     puddle.position.x = THREE.MathUtils.lerp(0, 1.15, THREE.MathUtils.smoothstep(anim.drainStart, anim.drainEnd, shown))
     puddle.position.z = THREE.MathUtils.lerp(0, -0.55, THREE.MathUtils.smoothstep(anim.drainStart, anim.drainEnd, shown))
