@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { defineConfig, type Plugin } from 'vite'
 
@@ -26,9 +26,23 @@ function publishScan(): Plugin {
   }
 }
 
+function publishPagesFiles(): Plugin {
+  const copy = () => {
+    mkdirSync('public', { recursive: true })
+    if (existsSync(resolve('boot.js'))) copyFileSync(resolve('boot.js'), resolve('public/boot.js'))
+    writeFileSync(resolve('public/.nojekyll'), '')
+  }
+
+  return {
+    name: 'publish-pages-files',
+    buildStart: copy,
+    configureServer: copy,
+  }
+}
+
 export default defineConfig({
   base: './',
-  plugins: [publishScan()],
+  plugins: [publishScan(), publishPagesFiles()],
   server: {
     host: true,
     allowedHosts: true,
@@ -36,5 +50,13 @@ export default defineConfig({
   build: {
     target: 'es2022',
     chunkSizeWarningLimit: 1200,
+    cssCodeSplit: false,
+    rollupOptions: {
+      output: {
+        inlineDynamicImports: true,
+        entryFileNames: 'assets/viewer.js',
+        assetFileNames: 'assets/[name][extname]',
+      },
+    },
   },
 })

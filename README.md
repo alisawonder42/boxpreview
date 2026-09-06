@@ -23,14 +23,12 @@ The viewer loads **`BoxModel.fbx`** and its print (`3DModel.fbm/3DModel.jpg`). Y
 
 ## GitHub Pages
 
-The site builds in Actions, then deploys with `deploy-pages`. That step 404s until Pages is turned on once:
-
-1. Open [Settings → Pages](https://github.com/alisawonder42/boxpreview/settings/pages)
-2. Under **Build and deployment → Source**, choose **GitHub Actions**
-3. Re-run the latest **pages** workflow on `main` (Actions → pages → Run workflow)
-
-After that, the viewer is at `https://alisawonder42.github.io/boxpreview/`  
+`https://alisawonder42.github.io/boxpreview/`  
 Embed: `https://alisawonder42.github.io/boxpreview/?embed=1`
+
+GitHub still Jekyll-deploys the repo root after the Vite Actions job, so the live page is often the source `index.html` (`/src/main.ts`). That script never runs, which is why the footer stays on **Looking for a scan…** even though `BoxModel.fbx` is already on the site. `boot.js` loads the last committed `assets/viewer.js` in that case.
+
+`npm run build` refreshes that bundle. The Actions workflow still uploads `dist` when GitHub Actions is the Pages source.
 
 ## Live preview
 

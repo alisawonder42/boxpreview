@@ -121,7 +121,8 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   const bundled = await findBundledScan()
   if (bundled) {
     prepareLoadedScan(bundled.root, uniforms, anisotropy)
-    replaceSubject(bundled.root, `Scan · ${bundled.url.replace('./models/', '')}`)
+    const name = bundled.url.split('/').pop() || bundled.url
+    replaceSubject(bundled.root, `Scan · ${name}`)
   }
 
   const controls = new OrbitControls(camera, canvas)
