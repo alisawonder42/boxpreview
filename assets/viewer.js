@@ -3876,7 +3876,7 @@ float snoise(vec3 v) {
   m = m * m;
   return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
 }
-`;function Qa(){return{meltIn:.42,meltOut:2.4,ease:1.22,sagEnd:.38,flattenStart:.1,flattenEnd:.64,drainStart:1,drainEnd:1,fadeStart:1,fadeEnd:1,spread:1.35,drainTravel:0,blobHeight:.07,blobPlump:1.35,blobLobes:.36,blobSpeed:.48,blobRadius:.9,blobFreq:1.55,blobGloss:.82,blobClearcoat:.7,puddleInStart:.1,puddleInEnd:.58,puddleOutStart:.6,puddleOutEnd:.93,progress:0,scrubbing:!1}}function Yu(){const s=Qa();return{uMelt:{value:0},uTime:{value:0},uCenter:{value:new P},uBoundsMin:{value:new P(-.5,0,-.5)},uBoundsMax:{value:new P(.5,1,.5)},uLift:{value:1.03},uGamma:{value:.76},uSagEnd:{value:s.sagEnd},uFlattenStart:{value:s.flattenStart},uFlattenEnd:{value:s.flattenEnd},uDrainStart:{value:s.drainStart},uDrainEnd:{value:s.drainEnd},uFadeStart:{value:s.fadeStart},uFadeEnd:{value:s.fadeEnd},uSpread:{value:s.spread},uDrainTravel:{value:s.drainTravel},uTourOffset:{value:new P},uBlobHeight:{value:s.blobHeight},uBlobPlump:{value:s.blobPlump},uBlobLobes:{value:s.blobLobes},uBlobSpeed:{value:s.blobSpeed},uBlobRadius:{value:s.blobRadius},uBlobFreq:{value:s.blobFreq}}}function ma(s,e){s.uSagEnd.value=e.sagEnd,s.uFlattenStart.value=e.flattenStart,s.uFlattenEnd.value=e.flattenEnd,s.uDrainStart.value=e.drainStart,s.uDrainEnd.value=e.drainEnd,s.uFadeStart.value=e.fadeStart,s.uFadeEnd.value=e.fadeEnd,s.uSpread.value=e.spread,s.uDrainTravel.value=e.drainTravel,s.uBlobHeight.value=e.blobHeight,s.uBlobPlump.value=e.blobPlump,s.uBlobLobes.value=e.blobLobes,s.uBlobSpeed.value=e.blobSpeed,s.uBlobRadius.value=e.blobRadius,s.uBlobFreq.value=e.blobFreq}function qu(s,e){return Math.pow(K0.clamp(s,0,1),Math.max(.2,e))}const Ku=`
+`;function Qa(){return{meltIn:.42,meltOut:2.4,ease:1.22,sagEnd:.38,flattenStart:.1,flattenEnd:.64,drainStart:1,drainEnd:1,fadeStart:1,fadeEnd:1,spread:.83,drainTravel:0,blobHeight:.03,blobPlump:.95,blobLobes:.95,blobSpeed:.22,blobRadius:.9,blobFreq:4,blobGloss:.47,blobClearcoat:.25,puddleInStart:.1,puddleInEnd:.58,puddleOutStart:.6,puddleOutEnd:.93,progress:0,scrubbing:!1}}function Yu(){const s=Qa();return{uMelt:{value:0},uTime:{value:0},uCenter:{value:new P},uBoundsMin:{value:new P(-.5,0,-.5)},uBoundsMax:{value:new P(.5,1,.5)},uLift:{value:1.03},uGamma:{value:.76},uSagEnd:{value:s.sagEnd},uFlattenStart:{value:s.flattenStart},uFlattenEnd:{value:s.flattenEnd},uDrainStart:{value:s.drainStart},uDrainEnd:{value:s.drainEnd},uFadeStart:{value:s.fadeStart},uFadeEnd:{value:s.fadeEnd},uSpread:{value:s.spread},uDrainTravel:{value:s.drainTravel},uTourOffset:{value:new P},uBlobHeight:{value:s.blobHeight},uBlobPlump:{value:s.blobPlump},uBlobLobes:{value:s.blobLobes},uBlobSpeed:{value:s.blobSpeed},uBlobRadius:{value:s.blobRadius},uBlobFreq:{value:s.blobFreq}}}function ma(s,e){s.uSagEnd.value=e.sagEnd,s.uFlattenStart.value=e.flattenStart,s.uFlattenEnd.value=e.flattenEnd,s.uDrainStart.value=e.drainStart,s.uDrainEnd.value=e.drainEnd,s.uFadeStart.value=e.fadeStart,s.uFadeEnd.value=e.fadeEnd,s.uSpread.value=e.spread,s.uDrainTravel.value=e.drainTravel,s.uBlobHeight.value=e.blobHeight,s.uBlobPlump.value=e.blobPlump,s.uBlobLobes.value=e.blobLobes,s.uBlobSpeed.value=e.blobSpeed,s.uBlobRadius.value=e.blobRadius,s.uBlobFreq.value=e.blobFreq}function qu(s,e){return Math.pow(K0.clamp(s,0,1),Math.max(.2,e))}const Ku=`
 uniform float uMelt;
 uniform float uTime;
 uniform vec3 uCenter;
@@ -3917,10 +3917,17 @@ vec3 applyBlob(vec3 world) {
   vec2 from = world.xz - center;
   float fromLen = length(from);
   vec2 nd = fromLen > 0.0001 ? from / fromLen : vec2(0.62, -0.28);
+  float ang = atan(nd.y, nd.x);
+
+  float a1 = snoise(vec3(cos(ang) * uBlobFreq, uTime * uBlobSpeed * 0.32, sin(ang) * uBlobFreq));
+  float a2 = snoise(vec3(cos(ang * 2.0 + 1.4) * uBlobFreq * 0.65, 4.2, sin(ang * 2.0 + 1.4) * uBlobFreq * 0.65));
+  float a3 = snoise(vec3(cos(ang * 3.0 - 0.8) * 1.1, uTime * uBlobSpeed * 0.18, sin(ang * 3.0 - 0.8) * 1.1));
+  float outline = 1.0 + uBlobLobes * (0.36 * a1 + 0.3 * a2 + 0.22 * a3);
 
   float footprint = max(0.16, uBlobRadius * uSpread);
-  float u = saturate(fromLen / 0.62);
-  float mappedR = mix(fromLen, footprint * u * (0.88 + lobe * uBlobLobes * 0.35), form);
+  float hull = max(abs(from.x), abs(from.y));
+  float hull01 = saturate(hull / 0.5);
+  float mappedR = mix(fromLen, footprint * outline * hull01, form);
   vec2 xz = center + nd * mappedR;
 
   float rn = length(xz - center) / footprint;
