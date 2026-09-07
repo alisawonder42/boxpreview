@@ -83,9 +83,14 @@ export function attachDebugMenu(options: DebugOptions) {
     folder.add(lens, 'glyphSpeed', 0, 3, 0.01).name('glyph switch speed')
     folder.add(lens, 'scanSpeed', 0, 1, 0.01).name('scan speed')
     folder.add(lens, 'scanBoost', 0, 1, 0.01).name('scan boost')
-    folder.addColor(lens, 'cyan').name('cyan')
-    folder.addColor(lens, 'red').name('red')
-    folder.addColor(lens, 'white').name('white')
+
+    folder.addColor(lens, 'cyan').name('color 1 · cyan')
+    folder.add(lens, 'cyanPercent', 0, 100, 1).name('color 1 %')
+    folder.addColor(lens, 'red').name('color 2 · red')
+    folder.add(lens, 'redPercent', 0, 100, 1).name('color 2 %')
+    folder.addColor(lens, 'white').name('color 3 · white')
+    folder.add(lens, 'whitePercent', 0, 100, 1).name('color 3 %')
+
     folder.add(
       {
         reset: () => {
