@@ -10,6 +10,7 @@ export type LightLook = {
   elevation: number
   distance: number
   softness: number
+  deskSize: number
   floor: string
   wall: string
 }
@@ -23,6 +24,7 @@ export const DEFAULT_LIGHT: LightLook = {
   elevation: 42,
   distance: 5.4,
   softness: 8,
+  deskSize: 5,
   floor: '#e4dfd4',
   wall: '#b9b8b4',
 }
@@ -87,6 +89,7 @@ export function attachDebugMenu(options: DebugOptions) {
   light.add(look, 'elevation', 8, 80, 1).name('elevation').onChange(apply)
   light.add(look, 'distance', 2, 10, 0.1).name('distance').onChange(apply)
   light.add(look, 'softness', 1, 12, 0.5).name('shadow soft').onChange(apply)
+  light.add(look, 'deskSize', 2, 10, 0.1).name('desk size').onChange(apply)
   light.addColor(look, 'floor').name('desk').onChange(apply)
   light.addColor(look, 'wall').name('wall').onChange(apply)
   light.add(

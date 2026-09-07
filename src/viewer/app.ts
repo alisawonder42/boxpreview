@@ -82,6 +82,8 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   const wall = createWall()
   scene.add(wall)
 
+  let subject!: THREE.Object3D
+
   const applyLook = () => {
     renderer.toneMappingExposure = look.exposure
     hemi.intensity = look.hemi
@@ -101,6 +103,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     deskMat.color.set(look.floor)
     wallMat.color.set(look.wall)
     scene.background = new THREE.Color(look.wall)
+    if (subject) fitDesk(ground, subject, look.deskSize)
   }
   applyLook()
 
@@ -111,10 +114,10 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   carrier.name = 'tour-carrier'
   scene.add(carrier)
 
-  let subject: THREE.Object3D = createStandInBox(uniforms)
+  subject = createStandInBox(uniforms)
   carrier.add(subject)
   bindMeltBounds(subject, uniforms)
-  fitDesk(ground, subject)
+  fitDesk(ground, subject, look.deskSize)
   const restCenter = uniforms.uCenter.value.clone()
   const restMin = uniforms.uBoundsMin.value.clone()
   const restMax = uniforms.uBoundsMax.value.clone()
@@ -141,7 +144,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     carrier.add(subject)
     bindMeltBounds(subject, uniforms)
     captureRest()
-    fitDesk(ground, subject)
+    fitDesk(ground, subject, look.deskSize)
     const map = firstAlbedo(subject)
     if (puddle.parent) puddle.parent.remove(puddle)
     puddle = createPuddle(map)
