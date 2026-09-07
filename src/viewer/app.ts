@@ -54,16 +54,17 @@ export async function startViewer(canvas: HTMLCanvasElement) {
 
   const scene = new THREE.Scene()
   scene.background = new THREE.Color(WALL_COLOR)
+  scene.fog = new THREE.Fog(WALL_COLOR, 16, 32)
   scene.environment = env
   scene.environmentIntensity = 0.9
 
   const camera = new THREE.PerspectiveCamera(32, window.innerWidth / window.innerHeight, 0.1, 48)
   camera.position.copy(INTRO_HOME.position)
 
-  const hemi = new THREE.HemisphereLight('#e4e2de', '#e7e3db', 0.7)
+  const hemi = new THREE.HemisphereLight('#e4e2de', '#ddd9d1', 0.58)
   scene.add(hemi)
 
-  const direct = new THREE.DirectionalLight('#fff6ea', 1.08)
+  const direct = new THREE.DirectionalLight('#fff6ea', 0.9)
   direct.position.set(-3.2, 3.8, 2.4)
   direct.castShadow = true
   direct.shadow.mapSize.set(1024, 1024)
@@ -73,7 +74,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   direct.shadow.camera.right = 2.6
   direct.shadow.camera.top = 2.6
   direct.shadow.camera.bottom = -2.6
-  direct.shadow.radius = 5
+  direct.shadow.radius = 6
   direct.shadow.bias = -0.0002
   scene.add(direct)
 
@@ -156,7 +157,6 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   const intro = createIntro({
     camera,
     renderer,
-    rig: { direct },
   })
   const skipIntro = shouldSkipIntro()
   if (skipIntro) {

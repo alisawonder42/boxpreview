@@ -212,37 +212,68 @@ export function createStandInBox(uniforms: MeltUniforms) {
   return group
 }
 
-export const DESK_COLOR = '#e7e3db'
-export const WALL_COLOR = '#d6d5d2'
+export const DESK_COLOR = '#ddd8d0'
+export const WALL_COLOR = '#c9c8c4'
 
 export function createGround() {
-  const geo = new THREE.PlaneGeometry(24, 24)
+  const geo = new THREE.PlaneGeometry(18, 14)
   geo.rotateX(-Math.PI / 2)
   const mat = new THREE.MeshStandardMaterial({
     color: DESK_COLOR,
-    roughness: 0.96,
+    roughness: 0.97,
     metalness: 0,
+    envMapIntensity: 0,
   })
   const mesh = new THREE.Mesh(geo, mat)
   mesh.name = 'desk'
   mesh.castShadow = false
   mesh.receiveShadow = true
-  mesh.position.y = FLOOR
+  mesh.position.set(0, FLOOR, 1.1)
   return mesh
 }
 
 export function createWall() {
-  const geo = new THREE.PlaneGeometry(32, 18)
+  const width = 26
+  const radius = 9
+  const wallH = 11
+  const segs = 28
+  const arcLen = radius * (Math.PI / 2)
+  const total = arcLen + wallH
+  const geo = new THREE.PlaneGeometry(width, total, 1, segs)
+  const pos = geo.attributes.position
+  const colors = new Float32Array(pos.count * 3)
+  const desk = new THREE.Color(DESK_COLOR)
+  const wall = new THREE.Color(WALL_COLOR)
+  const mixed = new THREE.Color()
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i)
+    const y0 = pos.getY(i) + total / 2
+    if (y0 <= arcLen) {
+      const a = y0 / radius
+      pos.setXYZ(i, x, radius - radius * Math.cos(a), -radius * Math.sin(a))
+      mixed.copy(desk).lerp(wall, a / (Math.PI / 2))
+    } else {
+      pos.setXYZ(i, x, radius + (y0 - arcLen), -radius)
+      mixed.copy(wall)
+    }
+    colors[i * 3] = mixed.r
+    colors[i * 3 + 1] = mixed.g
+    colors[i * 3 + 2] = mixed.b
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+  geo.computeVertexNormals()
   const mat = new THREE.MeshStandardMaterial({
-    color: WALL_COLOR,
-    roughness: 0.98,
+    color: '#ffffff',
+    roughness: 0.99,
     metalness: 0,
+    envMapIntensity: 0,
+    vertexColors: true,
   })
   const mesh = new THREE.Mesh(geo, mat)
   mesh.name = 'wall'
   mesh.castShadow = false
   mesh.receiveShadow = false
-  mesh.position.set(0, 8.85, -10.5)
+  mesh.position.set(0, FLOOR, -5.6)
   return mesh
 }
 
