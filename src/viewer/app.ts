@@ -105,6 +105,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   controls.maxPolarAngle = 1.42
   controls.target.copy(HOME_TARGET)
   controls.update()
+  controls.saveState()
 
   const pointerPixels = new THREE.Vector2(-1, -1)
   const pointerNDC = new THREE.Vector2(0, 0)
@@ -136,9 +137,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   canvas.addEventListener('pointerdown', hideHint)
 
   reset?.addEventListener('click', () => {
-    camera.position.copy(HOME_POSITION)
-    controls.target.copy(HOME_TARGET)
-    controls.update()
+    controls.reset()
   })
 
   const loadFile = async (file: File) => {
