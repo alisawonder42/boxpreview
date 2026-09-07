@@ -78,9 +78,9 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   direct.shadow.bias = -0.0002
   scene.add(direct)
 
-  const ground = createGround()
+  const ground = createGround(look.deskGrain)
   scene.add(ground)
-  const wall = createWall()
+  const wall = createWall(look.wallGrain, look.wallPatch)
   scene.add(wall)
 
   let subject!: THREE.Object3D
@@ -99,10 +99,21 @@ export async function startViewer(canvas: HTMLCanvasElement) {
       r * Math.cos(az) * Math.cos(el),
     )
     direct.shadow.radius = look.softness
-    const deskMat = ground.material as THREE.MeshStandardMaterial
-    const wallMat = wall.material as THREE.MeshBasicMaterial
-    deskMat.color.set(look.floor)
-    wallMat.color.set(look.wall)
+    const deskSurface = ground.userData.surface as {
+      uBaseColor: { value: THREE.Color }
+      uGrainStrength: { value: number }
+    }
+    const wallSurface = wall.userData.surface as {
+      uBaseColor: { value: THREE.Color }
+      uGrainStrength: { value: number }
+      uPatchStrength: { value: number }
+    }
+    deskSurface.uBaseColor.value.set(look.floor)
+    deskSurface.uGrainStrength.value = look.deskGrain
+    ;(ground.material as THREE.MeshStandardMaterial).color.set(look.floor)
+    wallSurface.uBaseColor.value.set(look.wall)
+    wallSurface.uGrainStrength.value = look.wallGrain
+    wallSurface.uPatchStrength.value = look.wallPatch
     scene.background = new THREE.Color(look.wall)
     if (subject) {
       fitDesk(ground, subject, look.deskSize)
