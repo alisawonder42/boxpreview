@@ -4,7 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import { createAnimalPrintTexture } from '../textures/animalPrint'
 import { applyMeltMaterial, meltDepthMaterial, prepareMeltMesh, type MeltUniforms } from './melt'
-import { createDeskSurface, createWallSurface } from './surfaces'
+import { createDeskSurface } from './surfaces'
 
 export const FLOOR = 0
 
@@ -214,7 +214,6 @@ export function createStandInBox(uniforms: MeltUniforms) {
 }
 
 export const DESK_COLOR = '#e4dfd4'
-export const WALL_COLOR = '#b9b8b4'
 
 export function createGround(grain = 0.04) {
   const geo = new THREE.PlaneGeometry(6, 6)
@@ -242,30 +241,6 @@ export function fitDesk(mesh: THREE.Mesh, object: THREE.Object3D, multiple = 5) 
   mesh.geometry = geo
   const center = box.getCenter(new THREE.Vector3())
   mesh.position.set(center.x, FLOOR, center.z)
-}
-
-export function createWall(grain = 0.035, patch = 0.05) {
-  const geo = new THREE.PlaneGeometry(48, 48)
-  const surface = createWallSurface(WALL_COLOR, grain, patch)
-  const mesh = new THREE.Mesh(geo, surface.material)
-  mesh.name = 'wall'
-  mesh.castShadow = false
-  mesh.receiveShadow = false
-  mesh.position.set(0, 24, -4)
-  mesh.userData.surface = surface
-  return mesh
-}
-
-export function fitWall(wall: THREE.Mesh, desk: THREE.Mesh) {
-  desk.updateMatrixWorld(true)
-  const box = new THREE.Box3().setFromObject(desk)
-  if (box.isEmpty()) return
-  const size = box.getSize(new THREE.Vector3())
-  const width = Math.max(size.x * 8, 32)
-  const height = Math.max(size.z * 10, 28)
-  wall.geometry.dispose()
-  wall.geometry = new THREE.PlaneGeometry(width, height)
-  wall.position.set((box.min.x + box.max.x) * 0.5, height * 0.5, box.min.z - 0.04)
 }
 
 export function createPuddle(map: THREE.Texture | null) {
