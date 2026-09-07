@@ -167,6 +167,60 @@ export function configureScanTexture(map: THREE.Texture, anisotropy = 8) {
   map.needsUpdate = true
 }
 
+function textureFrom(source: THREE.Material) {
+  if ('map' in source && source.map instanceof THREE.Texture) return source.map
+  return null
+}
+
+/**
+ * Rest look that used to live on the melt materials at progress 0.
+ * KIRI FBX meshes arrive as Phong/Lambert with a dark colour multiply and a
+ * strong env response, which hides the print. Keep the box matte, multiply
+ * the atlas at white, and lift the dark scan albedo so the pattern reads.
+ */
+function prepareScanMaterial(source: THREE.Material, anisotropy: number) {
+  const map = textureFrom(source)
+  if (map) configureScanTexture(map, anisotropy)
+
+  const mat =
+    source instanceof THREE.MeshPhysicalMaterial
+      ? source.clone()
+      : new THREE.MeshPhysicalMaterial({
+          color: '#ffffff',
+          map,
+          roughness: 0.92,
+          metalness: 0,
+          clearcoat: 0,
+          clearcoatRoughness: 0.4,
+        })
+
+  if (mat.map) {
+    configureScanTexture(mat.map, anisotropy)
+    mat.color.set('#ffffff')
+  }
+  mat.metalness = 0
+  mat.roughness = Math.max(mat.roughness, 0.92)
+  mat.envMapIntensity = 0.18
+  mat.transparent = false
+  mat.opacity = 1
+  mat.depthWrite = true
+  mat.depthTest = true
+  mat.clearcoat = 0
+  mat.clearcoatRoughness = 0.4
+  mat.ior = 1.32
+  mat.specularIntensity = 0.15
+  mat.customProgramCacheKey = () => 'scan-albedo'
+  mat.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <color_fragment>',
+      `#include <color_fragment>
+        diffuseColor.rgb = pow(max(diffuseColor.rgb, vec3(0.0)), vec3(0.76)) * 1.03;`,
+    )
+  }
+  mat.needsUpdate = true
+  return mat
+}
+
 export function prepareLoadedScan(root: THREE.Object3D, anisotropy = 8) {
   root.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return
@@ -177,21 +231,9 @@ export function prepareLoadedScan(root: THREE.Object3D, anisotropy = 8) {
     // KIRI writes reconstruction normals. Recomputing them on this
     // non-indexed mesh makes one flat normal per triangle.
     if (!child.geometry.getAttribute('normal')) child.geometry.computeVertexNormals()
-    const mats = Array.isArray(child.material) ? child.material : [child.material]
-    for (const mat of mats) {
-      if ('map' in mat && mat.map instanceof THREE.Texture) {
-        configureScanTexture(mat.map, anisotropy)
-      }
-      if ('normalMap' in mat && mat.normalMap instanceof THREE.Texture) {
-        mat.normalMap.anisotropy = Math.max(mat.normalMap.anisotropy, anisotropy)
-      }
-      if ('roughnessMap' in mat && mat.roughnessMap instanceof THREE.Texture) {
-        mat.roughnessMap.anisotropy = Math.max(mat.roughnessMap.anisotropy, anisotropy)
-      }
-      if ('metalnessMap' in mat && mat.metalnessMap instanceof THREE.Texture) {
-        mat.metalnessMap.anisotropy = Math.max(mat.metalnessMap.anisotropy, anisotropy)
-      }
-    }
+    const sources = Array.isArray(child.material) ? child.material : [child.material]
+    const next = sources.map((source) => prepareScanMaterial(source, anisotropy))
+    child.material = next.length === 1 ? next[0] : next
   })
   sitOnFloor(root)
 }
