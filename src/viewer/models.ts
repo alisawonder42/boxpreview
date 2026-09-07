@@ -1,12 +1,10 @@
 import * as THREE from 'three'
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
-import { createAnimalPrintTexture } from '../textures/animalPrint'
-import { applyMeltMaterial, meltDepthMaterial, prepareMeltMesh, type MeltUniforms } from './melt'
 import { createDeskSurface } from './surfaces'
 
 export const FLOOR = 0
+export const DESK_COLOR = '#e4dfd4'
 
 const SCAN_CANDIDATES = [
   './models/BoxModel.fbx',
@@ -120,7 +118,11 @@ function waitForTexture(map: THREE.Texture, ms = 8000) {
       resolve(ok)
     }
     const timer = setTimeout(() => finish(textureImageReady(map)), ms)
-    const image = map.image as { complete?: boolean; naturalWidth?: number; addEventListener?: Function } | undefined
+    const image = map.image as {
+      complete?: boolean
+      naturalWidth?: number
+      addEventListener?: (type: string, fn: () => void, opts?: { once: boolean }) => void
+    } | undefined
     if (image?.complete && image.naturalWidth) {
       finish(true)
       return
@@ -154,66 +156,73 @@ export async function findBundledScan() {
   return null
 }
 
-export function createStandInBox(uniforms: MeltUniforms) {
-  const group = new THREE.Group()
-  group.name = 'stand-in-box'
-  const { map, bump } = createAnimalPrintTexture()
-
-  const bodyMat = new THREE.MeshPhysicalMaterial({
-    map,
-    bumpMap: bump,
-    bumpScale: 0.55,
-    roughness: 0.9,
-    metalness: 0,
-    color: '#f3e6d2',
-  })
-  applyMeltMaterial(bodyMat, uniforms)
-  const depth = meltDepthMaterial(uniforms)
-
-  const body = new THREE.Mesh(new RoundedBoxGeometry(1.28, 0.72, 0.86, 8, 0.045), bodyMat)
-  body.position.y = 0.36
-  body.castShadow = true
-  body.receiveShadow = true
-  group.add(body)
-
-  const lid = new THREE.Mesh(new RoundedBoxGeometry(1.32, 0.16, 0.9, 8, 0.04), bodyMat)
-  lid.position.y = 0.8
-  lid.castShadow = true
-  group.add(lid)
-
-  const metal = new THREE.MeshPhysicalMaterial({
-    color: '#b08a4a',
-    metalness: 0.92,
-    roughness: 0.22,
-    envMapIntensity: 1.4,
-  })
-  applyMeltMaterial(metal, uniforms)
-  const clasp = new THREE.Mesh(new RoundedBoxGeometry(0.16, 0.22, 0.05, 3, 0.012), metal)
-  clasp.position.set(0, 0.7, 0.455)
-  clasp.castShadow = true
-  group.add(clasp)
-
-  const footGeo = new THREE.CylinderGeometry(0.045, 0.055, 0.08, 12)
-  for (const [x, z] of [
-    [-0.5, -0.3],
-    [0.5, -0.3],
-    [-0.5, 0.3],
-    [0.5, 0.3],
-  ] as const) {
-    const foot = new THREE.Mesh(footGeo, metal)
-    foot.position.set(x, 0.04, z)
-    foot.castShadow = true
-    group.add(foot)
-  }
-
-  group.traverse((child) => {
-    if (child instanceof THREE.Mesh) child.customDepthMaterial = depth
-  })
-
-  return group
+export function configureScanTexture(map: THREE.Texture, anisotropy = 8) {
+  // Leave flipY alone. FBX/TextureLoader uses true; glTF uses false.
+  // Forcing false on this KIRI atlas samples the wrong islands.
+  map.colorSpace = THREE.SRGBColorSpace
+  map.anisotropy = Math.max(map.anisotropy, anisotropy)
+  map.generateMipmaps = true
+  map.minFilter = THREE.LinearMipmapLinearFilter
+  map.magFilter = THREE.LinearFilter
+  map.needsUpdate = true
 }
 
-export const DESK_COLOR = '#e4dfd4'
+export function prepareLoadedScan(root: THREE.Object3D, anisotropy = 8) {
+  root.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return
+    child.visible = true
+    child.castShadow = true
+    child.receiveShadow = true
+    child.frustumCulled = true
+    // KIRI writes reconstruction normals. Recomputing them on this
+    // non-indexed mesh makes one flat normal per triangle.
+    if (!child.geometry.getAttribute('normal')) child.geometry.computeVertexNormals()
+    const mats = Array.isArray(child.material) ? child.material : [child.material]
+    for (const mat of mats) {
+      if ('map' in mat && mat.map instanceof THREE.Texture) {
+        configureScanTexture(mat.map, anisotropy)
+      }
+      if ('normalMap' in mat && mat.normalMap instanceof THREE.Texture) {
+        mat.normalMap.anisotropy = Math.max(mat.normalMap.anisotropy, anisotropy)
+      }
+      if ('roughnessMap' in mat && mat.roughnessMap instanceof THREE.Texture) {
+        mat.roughnessMap.anisotropy = Math.max(mat.roughnessMap.anisotropy, anisotropy)
+      }
+      if ('metalnessMap' in mat && mat.metalnessMap instanceof THREE.Texture) {
+        mat.metalnessMap.anisotropy = Math.max(mat.metalnessMap.anisotropy, anisotropy)
+      }
+    }
+  })
+  sitOnFloor(root)
+}
+
+function meshBounds(object: THREE.Object3D) {
+  const box = new THREE.Box3()
+  object.updateMatrixWorld(true)
+  object.traverse((child) => {
+    if ((child as THREE.Mesh).isMesh) box.expandByObject(child)
+  })
+  return box
+}
+
+export function sitOnFloor(object: THREE.Object3D, top = FLOOR) {
+  // KIRI FBX files sit far from the origin (cm-scale child + offset mesh).
+  // Scale first, then recenter — scaling after a translate pivots around the
+  // object's origin and throws the box off the desk.
+  const box = meshBounds(object)
+  if (box.isEmpty()) return
+  const size = box.getSize(new THREE.Vector3())
+  const longest = Math.max(size.x, size.y, size.z)
+  if (!Number.isFinite(longest) || longest < 1e-5) return
+
+  object.scale.multiplyScalar(1.18 / longest)
+  const seated = meshBounds(object)
+  if (seated.isEmpty()) return
+  const center = seated.getCenter(new THREE.Vector3())
+  object.position.x += -center.x
+  object.position.z += -center.z
+  object.position.y += top - seated.min.y
+}
 
 export function createGround(grain = 0.04) {
   const geo = new THREE.PlaneGeometry(6, 6)
@@ -241,96 +250,4 @@ export function fitDesk(mesh: THREE.Mesh, object: THREE.Object3D, multiple = 5) 
   mesh.geometry = geo
   const center = box.getCenter(new THREE.Vector3())
   mesh.position.set(center.x, FLOOR, center.z)
-}
-
-export function createPuddle(map: THREE.Texture | null) {
-  const mesh = new THREE.Mesh(
-    new THREE.CircleGeometry(0.55, 64),
-    new THREE.MeshPhysicalMaterial({
-      map: map ?? null,
-      color: map ? '#ffffff' : '#c48a4a',
-      roughness: 0.08,
-      metalness: 0.02,
-      clearcoat: 1,
-      clearcoatRoughness: 0.04,
-      transparent: true,
-      opacity: 0,
-    }),
-  )
-  mesh.rotation.x = -Math.PI / 2
-  mesh.position.y = FLOOR + 0.004
-  mesh.receiveShadow = true
-  mesh.visible = false
-  return mesh
-}
-
-function meshBounds(object: THREE.Object3D) {
-  const box = new THREE.Box3()
-  object.updateMatrixWorld(true)
-  object.traverse((child) => {
-    if ((child as THREE.Mesh).isMesh) box.expandByObject(child)
-  })
-  return box
-}
-
-export function sitOnFloor(object: THREE.Object3D, top = FLOOR) {
-  // KIRI FBX files sit far from the origin (cm-scale child + offset mesh).
-  // Scale first, then recenter — scaling after a translate pivots around the
-  // object's origin and throws the box into the fog.
-  const box = meshBounds(object)
-  if (box.isEmpty()) return
-  const size = box.getSize(new THREE.Vector3())
-  const longest = Math.max(size.x, size.y, size.z)
-  if (!Number.isFinite(longest) || longest < 1e-5) return
-
-  object.scale.multiplyScalar(1.18 / longest)
-  const seated = meshBounds(object)
-  if (seated.isEmpty()) return
-  const center = seated.getCenter(new THREE.Vector3())
-  object.position.x += -center.x
-  object.position.z += -center.z
-  object.position.y += top - seated.min.y
-}
-
-export function configureScanTexture(map: THREE.Texture, anisotropy = 8) {
-  // Leave flipY alone. FBX/TextureLoader uses true; glTF uses false.
-  // Forcing false on this KIRI atlas samples the wrong islands.
-  map.colorSpace = THREE.SRGBColorSpace
-  map.anisotropy = Math.max(map.anisotropy, anisotropy)
-  map.generateMipmaps = true
-  map.minFilter = THREE.LinearMipmapLinearFilter
-  map.magFilter = THREE.LinearFilter
-  map.needsUpdate = true
-}
-
-export function prepareLoadedScan(
-  root: THREE.Object3D,
-  uniforms: MeltUniforms,
-  anisotropy = 8,
-) {
-  root.traverse((child) => {
-    if (!(child instanceof THREE.Mesh)) return
-    child.visible = true
-    // KIRI writes reconstruction normals. Recomputing them on this
-    // non-indexed mesh makes one flat normal per triangle — the "simplified" look.
-    if (!child.geometry.getAttribute('normal')) child.geometry.computeVertexNormals()
-    prepareMeltMesh(child, uniforms)
-    const mats = Array.isArray(child.material) ? child.material : [child.material]
-    for (const mat of mats) {
-      if ('map' in mat && mat.map instanceof THREE.Texture) {
-        configureScanTexture(mat.map, anisotropy)
-      }
-    }
-  })
-  sitOnFloor(root)
-}
-
-export function firstAlbedo(root: THREE.Object3D) {
-  let map: THREE.Texture | null = null
-  root.traverse((child) => {
-    if (map || !(child instanceof THREE.Mesh)) return
-    const mat = Array.isArray(child.material) ? child.material[0] : child.material
-    if (mat && 'map' in mat && mat.map instanceof THREE.Texture) map = mat.map
-  })
-  return map
 }

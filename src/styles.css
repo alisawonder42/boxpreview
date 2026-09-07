@@ -33,12 +33,6 @@ body.embed [data-chrome] {
   display: none;
 }
 
-body.filming [data-chrome] {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-}
-
 [data-chrome],
 .lil-gui {
   transition: opacity 800ms var(--ease), visibility 800ms var(--ease);
@@ -50,10 +44,6 @@ body.filming [data-chrome] {
   height: 100%;
   touch-action: none;
   cursor: grab;
-}
-
-body.filming #stage {
-  cursor: default;
 }
 
 body.ready #stage {
@@ -75,10 +65,6 @@ body.ready #stage {
 
 #stage:active {
   cursor: grabbing;
-}
-
-body.filming #stage:active {
-  cursor: default;
 }
 
 .chrome {

@@ -106,11 +106,11 @@ export const projects: Project[] = [
     type: 'Interactive 3D / Photogrammetry',
     kindLabel: 'Interactive 3D / Photogrammetry',
     kind: 'independent',
-    overview: 'A scanned ornamental box. Drag to turn it. Click, and it forgets that it is solid.',
+    overview: 'A scanned domestic object. Drag to explore.',
     sections: [
       {
         content: [
-          'The object is a photogrammetry scan of a real box. The animal print stays on the surface while it slumps, flattens, and drains off the stand.',
+          'The object is a photogrammetry scan of a real box, sitting on a desk.',
           'Built in vanilla Three.js so it can sit on its own or inside this site.',
         ],
       },
