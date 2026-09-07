@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 import { attachDebugMenu, DEFAULT_LIGHT, type LightLook } from './debug'
+import { createTechnicalLens } from './technicalLens'
 import {
   createGround,
   findBundledScan,
@@ -95,6 +96,9 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   }
   applyLook()
 
+  const lens = createTechnicalLens(renderer)
+  const clock = new THREE.Clock()
+
   const controls = new OrbitControls(camera, canvas)
   controls.enablePan = false
   controls.enableDamping = true
@@ -121,7 +125,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     setSource(label)
   }
 
-  attachDebugMenu({ look, onLook: applyLook })
+  attachDebugMenu({ look, onLook: applyLook, lens: lens.params })
 
   const hideHint = () => hintWrap?.classList.add('is-hidden')
 
@@ -131,9 +135,18 @@ export async function startViewer(canvas: HTMLCanvasElement) {
       (event.clientX / window.innerWidth) * 2 - 1,
       -(event.clientY / window.innerHeight) * 2 + 1,
     )
+    lens.setPointer(event.clientX, event.clientY)
+    lens.setPointerActive(true)
   }
   canvas.addEventListener('pointermove', onPointerMove)
   canvas.addEventListener('pointerdown', hideHint)
+  canvas.addEventListener('pointerenter', (event) => {
+    lens.setPointer(event.clientX, event.clientY)
+    lens.setPointerActive(true)
+  })
+  canvas.addEventListener('pointerleave', () => {
+    lens.setPointerActive(false)
+  })
 
   reset?.addEventListener('click', () => {
     camera.position.copy(HOME_POSITION)
@@ -174,6 +187,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     camera.aspect = w / h
     camera.updateProjectionMatrix()
     renderer.setSize(w, h)
+    lens.resize()
   })
 
   const loop = () => {
@@ -181,7 +195,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     controls.update()
     canvas.dataset.pointer = `${pointerNDC.x.toFixed(3)},${pointerNDC.y.toFixed(3)}`
     canvas.dataset.pointerPx = `${pointerPixels.x.toFixed(0)},${pointerPixels.y.toFixed(0)}`
-    renderer.render(scene, camera)
+    lens.render(scene, camera, clock.getElapsedTime())
   }
   loop()
   document.body.classList.add('ready')
