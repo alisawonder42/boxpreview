@@ -77,16 +77,15 @@ export function attachDebugMenu(options: DebugOptions) {
     folder.add(lens, 'surfaceDensity', 0, 0.7, 0.01).name('surface density')
     folder.add(lens, 'backgroundDensity', 0, 0.2, 0.005).name('background density')
     folder.add(lens, 'markBrightness', 0.2, 2, 0.01).name('mark brightness')
-    folder.add(lens, 'vectorLength', 0.15, 0.6, 0.01).name('vector length')
-    folder.add(lens, 'animSpeed', 0, 2, 0.01).name('animation speed')
-    folder.add(lens, 'charSpeed', 0, 8, 0.05).name('character speed')
-    folder.add(lens, 'colorSpeed', 0, 8, 0.05).name('color speed')
-    folder.addColor(lens, 'colorA').name('color A')
-    folder.addColor(lens, 'colorB').name('color B')
-    folder.addColor(lens, 'colorC').name('color C')
+    folder.add(lens, 'vectorLength', 0.15, 0.6, 0.01).name('glyph size')
+    folder.add(lens, 'animSpeed', 0, 2, 0.01).name('pulse speed')
     folder.add(lens, 'pulseAmount', 0, 0.5, 0.01).name('pulse amount')
+    folder.add(lens, 'glyphSpeed', 0, 3, 0.01).name('glyph switch speed')
     folder.add(lens, 'scanSpeed', 0, 1, 0.01).name('scan speed')
     folder.add(lens, 'scanBoost', 0, 1, 0.01).name('scan boost')
+    folder.addColor(lens, 'cyan').name('cyan')
+    folder.addColor(lens, 'red').name('red')
+    folder.addColor(lens, 'white').name('white')
     folder.add(
       {
         reset: () => {
