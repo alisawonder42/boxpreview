@@ -1,7 +1,7 @@
 # Scan
 
-The viewer loads **`BoxModel.fbx`**. KIRI still names the sidecar **`3DModel.fbm/3DModel.jpg`**.
+The viewer loads **`Box-cleaned.glb`** first. It keeps the original print and fills the reconstructed underside.
 
-Vite copies those from the repo root into this folder when the dev server or build starts.
+`BoxModel.fbx` and its KIRI sidecar **`3DModel.fbm/3DModel.jpg`** remain as a fallback.
 
-You can also drag a `.fbx` onto the running page.
+You can also drop a `.glb` or `.fbx` onto the running page.

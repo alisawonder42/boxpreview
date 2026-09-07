@@ -7,9 +7,14 @@ export const FLOOR = 0
 export const DESK_COLOR = '#e4dfd4'
 
 const SCAN_CANDIDATES = [
+  './models/Box-cleaned.glb',
+  './public/models/Box-cleaned.glb',
+  'public/models/Box-cleaned.glb',
+  './Box-cleaned.glb',
   './models/BoxModel.fbx',
   './BoxModel.fbx',
   'BoxModel.fbx',
+  'https://cdn.jsdelivr.net/gh/alisawonder42/boxpreview@main/public/models/Box-cleaned.glb',
   'https://cdn.jsdelivr.net/gh/alisawonder42/boxpreview@main/BoxModel.fbx',
 ]
 
@@ -172,51 +177,52 @@ function textureFrom(source: THREE.Material) {
   return null
 }
 
+function sourceColor(source: THREE.Material) {
+  if ('color' in source && source.color instanceof THREE.Color) return source.color.clone()
+  return new THREE.Color('#ffffff')
+}
+
+function sourceRoughness(source: THREE.Material) {
+  if ('roughness' in source && typeof source.roughness === 'number') return source.roughness
+  return 0.92
+}
+
 /**
- * Rest look that used to live on the melt materials at progress 0.
- * KIRI FBX meshes arrive as Phong/Lambert with a dark colour multiply and a
- * strong env response, which hides the print. Keep the box matte, multiply
- * the atlas at white, and lift the dark scan albedo so the pattern reads.
+ * Rest look for the photogrammetry scan: matte, atlas at white, slight albedo
+ * lift so the print reads under ACES. Unmapped fills (the cleaned underside)
+ * keep their authored colour so they do not flash white.
  */
 function prepareScanMaterial(source: THREE.Material, anisotropy: number) {
   const map = textureFrom(source)
   if (map) configureScanTexture(map, anisotropy)
 
-  const mat =
-    source instanceof THREE.MeshPhysicalMaterial
-      ? source.clone()
-      : new THREE.MeshPhysicalMaterial({
-          color: '#ffffff',
-          map,
-          roughness: 0.92,
-          metalness: 0,
-          clearcoat: 0,
-          clearcoatRoughness: 0.4,
-        })
+  const mat = new THREE.MeshPhysicalMaterial({
+    color: map ? '#ffffff' : sourceColor(source),
+    map,
+    roughness: Math.max(sourceRoughness(source), map ? 0.92 : 0.9),
+    metalness: 0,
+    envMapIntensity: 0.18,
+    clearcoat: 0,
+    clearcoatRoughness: 0.4,
+    ior: 1.32,
+    specularIntensity: 0.15,
+    transparent: false,
+    opacity: 1,
+    depthWrite: true,
+    depthTest: true,
+  })
 
-  if (mat.map) {
-    configureScanTexture(mat.map, anisotropy)
-    mat.color.set('#ffffff')
+  if (map) {
+    mat.customProgramCacheKey = () => 'scan-albedo'
+    mat.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+          diffuseColor.rgb = pow(max(diffuseColor.rgb, vec3(0.0)), vec3(0.76)) * 1.03;`,
+      )
+    }
   }
-  mat.metalness = 0
-  mat.roughness = Math.max(mat.roughness, 0.92)
-  mat.envMapIntensity = 0.18
-  mat.transparent = false
-  mat.opacity = 1
-  mat.depthWrite = true
-  mat.depthTest = true
-  mat.clearcoat = 0
-  mat.clearcoatRoughness = 0.4
-  mat.ior = 1.32
-  mat.specularIntensity = 0.15
-  mat.customProgramCacheKey = () => 'scan-albedo'
-  mat.onBeforeCompile = (shader) => {
-    shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <color_fragment>',
-      `#include <color_fragment>
-        diffuseColor.rgb = pow(max(diffuseColor.rgb, vec3(0.0)), vec3(0.76)) * 1.03;`,
-    )
-  }
+
   mat.needsUpdate = true
   return mat
 }

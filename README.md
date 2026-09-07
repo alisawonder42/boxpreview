@@ -19,7 +19,7 @@ Production build: `npm run build`. Preview it with `npm run preview`.
 
 ## Your scan
 
-The viewer loads **`BoxModel.fbx`** and its print (`3DModel.fbm/3DModel.jpg`). You can also drag another `.fbx` onto the page.
+The viewer loads **`Box-cleaned.glb`** (cleaned scan + filled underside), and falls back to **`BoxModel.fbx`**. You can also drop a `.glb` or `.fbx` onto the page.
 
 ## GitHub Pages
 
