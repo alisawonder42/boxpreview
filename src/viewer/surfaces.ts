@@ -89,22 +89,22 @@ export function createDeskSurface(color: string, grain = 0.04): DeskSurface {
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
-        `#include <common>\nvarying vec3 vWorldPosition;`,
+        `#include <common>\nvarying vec3 vDeskWorldPos;`,
       )
       .replace(
         '#include <project_vertex>',
-        `#include <project_vertex>\nvWorldPosition = (modelMatrix * vec4(transformed, 1.0)).xyz;`,
+        `#include <project_vertex>\nvDeskWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`,
       )
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <common>',
-        `#include <common>\nvarying vec3 vWorldPosition;\nuniform vec3 uBaseColor;\nuniform float uGrainStrength;\n${NOISE_GLSL}`,
+        `#include <common>\nvarying vec3 vDeskWorldPos;\nuniform vec3 uBaseColor;\nuniform float uGrainStrength;\n${NOISE_GLSL}`,
       )
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
-          float broadVariation = surfaceFbm(vWorldPosition.xz * 0.35);
-          float fineGrain = surfaceNoise(vWorldPosition.xz * 170.0);
+          float broadVariation = surfaceFbm(vDeskWorldPos.xz * 0.35);
+          float fineGrain = surfaceNoise(vDeskWorldPos.xz * 170.0);
           vec3 warmTint = vec3(1.0, 0.985, 0.955);
           vec3 coolTint = vec3(0.975, 0.985, 1.0);
           vec3 grainColor = mix(uBaseColor * coolTint, uBaseColor * warmTint, broadVariation);

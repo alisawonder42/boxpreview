@@ -114,7 +114,8 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     wallSurface.uBaseColor.value.set(look.wall)
     wallSurface.uGrainStrength.value = look.wallGrain
     wallSurface.uPatchStrength.value = look.wallPatch
-    scene.background = new THREE.Color(look.wall)
+    wall.visible = look.showWall
+    scene.background = new THREE.Color(look.showWall ? look.wall : look.floor)
     if (subject) {
       fitDesk(ground, subject, look.deskSize)
       fitWall(wall, ground)
