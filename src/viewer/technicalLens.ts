@@ -6,12 +6,8 @@ export type LensParams = {
   lensSize: number
   cellSize: number
   depthEdge: number
-  colorEdge: number
-  depthCoarse: number
-  depthFine: number
   surfaceDensity: number
   backgroundDensity: number
-  textureInfluence: number
   markBrightness: number
   vectorLength: number
   glitch: number
@@ -21,19 +17,17 @@ export type LensParams = {
 export const DEFAULT_LENS: LensParams = {
   enabled: true,
   lensSize: 240,
-  cellSize: 10,
-  depthEdge: 2.2,
-  colorEdge: 0.25,
-  depthCoarse: 1.0,
-  depthFine: 0.4,
-  surfaceDensity: 0.28,
-  backgroundDensity: 0.06,
-  textureInfluence: 0.12,
-  markBrightness: 1.15,
-  vectorLength: 0.78,
-  glitch: 0.01,
-  animSpeed: 0.25,
+  cellSize: 12,
+  depthEdge: 1.8,
+  surfaceDensity: 0.12,
+  backgroundDensity: 0.03,
+  markBrightness: 1.05,
+  vectorLength: 0.36,
+  glitch: 0,
+  animSpeed: 0,
 }
+
+const NORMAL_SCALE = 0.6
 
 const VERTEX = /* glsl */ `
 varying vec2 vUv;
@@ -50,6 +44,7 @@ const FRAGMENT = /* glsl */ `
 
 uniform sampler2D tScene;
 uniform sampler2D tDepth;
+uniform sampler2D tNormal;
 uniform vec2 uResolution;
 uniform vec2 uPointer;
 uniform float uLensSize;
@@ -58,12 +53,8 @@ uniform float uActive;
 uniform float uEnabled;
 uniform float uTime;
 uniform float uDepthEdge;
-uniform float uColorEdge;
-uniform float uDepthCoarse;
-uniform float uDepthFine;
 uniform float uSurfaceDensity;
 uniform float uBackgroundDensity;
-uniform float uTextureInfluence;
 uniform float uMarkBrightness;
 uniform float uVectorLength;
 uniform float uGlitch;
@@ -82,10 +73,6 @@ float hash21(vec2 p) {
   return fract(p.x * p.y);
 }
 
-float luma(vec3 c) {
-  return dot(c, vec3(0.2126, 0.7152, 0.0722));
-}
-
 float sdSegment(vec2 p, vec2 a, vec2 b) {
   vec2 pa = p - a;
   vec2 ba = b - a;
@@ -94,7 +81,7 @@ float sdSegment(vec2 p, vec2 a, vec2 b) {
 }
 
 float stroke(float d, float width) {
-  float aa = max(fwidth(d), 0.0012);
+  float aa = max(fwidth(d), 0.0015);
   return 1.0 - smoothstep(width, width + aa, d);
 }
 
@@ -104,12 +91,12 @@ float orientedLine(vec2 p, vec2 dir, float halfLen, float thick) {
 }
 
 float markDot(vec2 p) {
-  return stroke(length(p) - 0.012, 0.018);
+  return stroke(length(p) - 0.016, 0.02);
 }
 
 float markPlus(vec2 p, float s) {
-  float a = stroke(sdSegment(p, vec2(-s, 0.0), vec2(s, 0.0)), 0.012);
-  float b = stroke(sdSegment(p, vec2(0.0, -s), vec2(0.0, s)), 0.012);
+  float a = stroke(sdSegment(p, vec2(-s, 0.0), vec2(s, 0.0)), 0.016);
+  float b = stroke(sdSegment(p, vec2(0.0, -s), vec2(0.0, s)), 0.016);
   return max(a, b);
 }
 
@@ -120,34 +107,50 @@ float readEyeDepth(vec2 uv) {
   return -viewZ;
 }
 
-vec2 colorGrad(vec2 uv, float distPx) {
-  vec2 span = vec2(distPx) / uResolution;
-  float lL = luma(texture2D(tScene, uv - vec2(span.x, 0.0)).rgb);
-  float lR = luma(texture2D(tScene, uv + vec2(span.x, 0.0)).rgb);
-  float lD = luma(texture2D(tScene, uv - vec2(0.0, span.y)).rgb);
-  float lU = luma(texture2D(tScene, uv + vec2(0.0, span.y)).rgb);
-  return vec2(lR - lL, lU - lD);
+vec3 decodeNormal(vec2 uv) {
+  vec3 packed = texture2D(tNormal, clamp(uv, vec2(0.001), vec2(0.999))).rgb;
+  return packed * 2.0 - 1.0;
 }
 
-vec2 depthGrad(vec2 uv, float distPx) {
-  vec2 span = vec2(distPx) / uResolution;
-  float dL = readEyeDepth(uv - vec2(span.x, 0.0));
-  float dR = readEyeDepth(uv + vec2(span.x, 0.0));
-  float dD = readEyeDepth(uv - vec2(0.0, span.y));
-  float dU = readEyeDepth(uv + vec2(0.0, span.y));
-  return vec2(dR - dL, dU - dD);
+vec3 sampleNormal(vec2 uv, float px) {
+  vec2 e = vec2(px, 0.0) / uResolution;
+  vec3 n = decodeNormal(uv);
+  n += decodeNormal(uv + e);
+  n += decodeNormal(uv - e);
+  n += decodeNormal(uv + e.yx);
+  n += decodeNormal(uv - e.yx);
+  float len = length(n);
+  return len > 1e-4 ? n / len : vec3(0.0);
 }
 
-vec3 fieldColor(vec2 tangent, float edgeAmt, float h) {
-  float horiz = abs(tangent.x);
-  vec3 color = mix(uRed, uCyan, smoothstep(0.28, 0.72, horiz));
-  color = mix(color, mix(uCyan, uRed, step(h, 0.5)), 0.14 * (1.0 - abs(abs(tangent.x) - abs(tangent.y))));
-  color = mix(color, uWhite, edgeAmt * 0.78);
-  return color;
+float depthDiscontinuity(vec2 uv, float distPx) {
+  vec2 span = vec2(distPx) / uResolution;
+  float c = readEyeDepth(uv);
+  float l = abs(readEyeDepth(uv - vec2(span.x, 0.0)) - c);
+  float r = abs(readEyeDepth(uv + vec2(span.x, 0.0)) - c);
+  float d = abs(readEyeDepth(uv - vec2(0.0, span.y)) - c);
+  float u = abs(readEyeDepth(uv + vec2(0.0, span.y)) - c);
+  return max(max(l, r), max(d, u)) / max(c, 0.15);
+}
+
+vec2 planeDir(vec3 n) {
+  vec3 a = abs(n);
+  if (a.y >= a.x && a.y >= a.z * 0.82) return vec2(1.0, 0.0);
+  if (a.x >= a.y && a.x >= a.z * 0.82) {
+    return n.x >= 0.0 ? vec2(0.0, 1.0) : vec2(-0.7071, 0.7071);
+  }
+  return vec2(0.7071, 0.7071);
+}
+
+vec3 planeInk(vec3 n, float edgeAmt, float h) {
+  vec3 a = abs(n);
+  vec3 ink = a.x > a.y ? uRed : uCyan;
+  if (edgeAmt > 0.62 && h > 0.9) ink = uWhite;
+  return ink;
 }
 
 vec3 technical(vec2 frag) {
-  float cell = max(uCellSize, 6.0);
+  float cell = max(uCellSize, 8.0);
   vec2 cellId = floor(frag / cell);
   vec2 origin = cellId * cell;
 
@@ -157,100 +160,63 @@ vec3 technical(vec2 frag) {
   float hOcc = hash21(cellId + 41.7);
   float hMark = hash21(cellId + 71.3);
 
-  vec2 jitter = vec2(h - 0.5, h2 - 0.5) * 0.40;
+  vec2 jitter = (vec2(h, h2) - 0.5) * 0.44;
   vec2 local = (frag - origin) / cell - 0.5 - jitter * 0.5;
   vec2 center = origin + cell * (0.5 + jitter * 0.5);
   vec2 uv = clamp(center / uResolution, vec2(0.002), vec2(0.998));
 
+  vec3 n = sampleNormal(uv, cell * 0.45);
+  float nLen = length(decodeNormal(uv));
+  float hasGeom = step(0.28, nLen);
+
   float eyeDepth = readEyeDepth(uv);
-  float isSky = step(uCameraFar * 0.78, eyeDepth);
-  float invDepth = 1.0 / max(eyeDepth, 0.15);
+  float isSky = max(step(uCameraFar * 0.78, eyeDepth), 1.0 - hasGeom);
+  float disc = depthDiscontinuity(uv, cell * 1.6);
+  float discWide = depthDiscontinuity(uv, cell * 3.4);
+  float edgeAmt = smoothstep(0.12, 0.55, disc * uDepthEdge);
+  float nearBound = smoothstep(0.08, 0.4, discWide * uDepthEdge);
 
-  vec2 dFine = depthGrad(uv, cell * 0.55);
-  vec2 dCoarse = depthGrad(uv, cell * 1.75);
-  vec2 dWide = depthGrad(uv, cell * 4.2);
-  vec2 cFine = colorGrad(uv, cell * 0.55);
-  vec2 cCoarse = colorGrad(uv, cell * 1.75);
-
-  float magDFine = length(dFine) * invDepth;
-  float magDCoarse = length(dCoarse) * invDepth;
-  float magDWide = length(dWide) * invDepth;
-  float magCFine = length(cFine);
-  float magCCoarse = length(cCoarse);
-
-  float geometryStructure =
-    magDCoarse * 14.0 * uDepthCoarse +
-    magDFine * 5.5 * uDepthFine;
-  float textureStructure =
-    magCCoarse * 0.2 * uTextureInfluence +
-    magCFine * 0.08 * uTextureInfluence;
-  float structure = geometryStructure * uDepthEdge + textureStructure * uColorEdge;
-
-  float edgeAmt = smoothstep(0.55, 2.4, geometryStructure);
-  float nearFeature = smoothstep(0.18, 0.85, magDWide);
-
-  float occupancy = mix(uBackgroundDensity, uBackgroundDensity * 1.15, 1.0 - isSky);
-  occupancy = mix(occupancy, uSurfaceDensity * 0.38, (1.0 - isSky) * smoothstep(0.18, 0.7, geometryStructure));
-  occupancy = mix(occupancy, uSurfaceDensity * 0.85, (1.0 - isSky) * smoothstep(0.55, 1.35, geometryStructure));
-  occupancy = mix(
-    occupancy,
-    mix(0.72, 0.88, clamp((geometryStructure - 1.35) * 0.32, 0.0, 1.0)),
-    (1.0 - isSky) * edgeAmt
-  );
-  occupancy = mix(occupancy, occupancy * 1.2, (1.0 - isSky) * nearFeature * (1.0 - edgeAmt) * 0.4);
-  occupancy = clamp(occupancy, 0.0, 0.90);
+  float occupancy = uBackgroundDensity;
+  occupancy = mix(occupancy, uSurfaceDensity, hasGeom * (1.0 - isSky));
+  occupancy = mix(occupancy, mix(0.2, 0.3, h3), hasGeom * (1.0 - isSky) * nearBound);
+  occupancy = mix(occupancy, mix(0.4, 0.55, h2), hasGeom * (1.0 - isSky) * edgeAmt);
+  occupancy = clamp(occupancy, 0.0, 0.55);
 
   if (hOcc > occupancy) return vec3(0.0);
 
-  vec2 gDepth = dCoarse + dFine * 0.35;
-  float gLen = length(gDepth);
-  vec2 tangent;
-  if (gLen > 1e-5) {
-    tangent = normalize(vec2(-gDepth.y, gDepth.x));
-  } else {
-    vec2 gColor = cCoarse * 0.35 + cFine * 0.12;
-    float cLen = length(gColor);
-    tangent = cLen > 1e-5 ? normalize(vec2(-gColor.y, gColor.x)) : vec2(1.0, 0.0);
-  }
+  vec2 dir = planeDir(n);
+  float span = mix(0.28, 0.42, edgeAmt);
+  span = mix(span, 0.52, edgeAmt * edgeAmt);
+  span *= uVectorLength / 0.36;
+  span = clamp(span, 0.22, 0.55);
+  float halfLen = span * 0.5;
+  float thick = mix(0.016, 0.022, edgeAmt);
 
-  float breath = 0.97 + 0.03 * sin(uTime * (0.4 + uAnimSpeed * 0.5) + h * 6.28318);
-  float halfLen = mix(0.32, 0.44, edgeAmt) * (uVectorLength / 0.72) * mix(0.98, 1.03, h2) * breath;
-  halfLen = clamp(halfLen, 0.26, 0.50);
-  float thick = mix(0.008, 0.014, edgeAmt);
-
-  float useCross = step(2.8, geometryStructure) * step(0.985, hMark) * (1.0 - isSky);
-  float useDot = (1.0 - useCross) * step(hMark, 0.075) * (1.0 - step(1.0, geometryStructure));
+  float useCross = step(0.95, hMark) * step(0.45, edgeAmt);
+  float useDot = (1.0 - useCross) * step(hMark, 0.20);
   float useLine = 1.0 - useCross - useDot;
 
+  vec3 ink = planeInk(n, edgeAmt, h);
+  float intensity = mix(0.72, 1.08, edgeAmt) * uMarkBrightness * mix(0.45, 1.0, hasGeom);
+
   vec3 color = vec3(0.0);
-  vec3 ink = fieldColor(tangent, edgeAmt, h);
-  float intensity = mix(0.48, 1.12, edgeAmt) * uMarkBrightness * breath * mix(0.4, 1.0, 1.0 - isSky);
+  color += ink * orientedLine(local, dir, halfLen, thick) * intensity * useLine;
 
-  color += ink * orientedLine(local, tangent, halfLen, thick) * intensity * useLine;
-
-  if (useLine > 0.5 && edgeAmt > 0.62 && h2 > 0.7) {
-    vec2 normal = vec2(-tangent.y, tangent.x);
-    float off = mix(0.05, 0.085, h3);
-    vec3 alt = mix(uRed, uCyan, 1.0 - smoothstep(0.28, 0.72, abs(tangent.x)));
-    color += alt * orientedLine(local + normal * off, tangent, halfLen * 0.78, thick * 0.65) * intensity * 0.32;
+  if (useLine > 0.5 && edgeAmt > 0.55 && h2 > 0.84) {
+    vec2 perp = vec2(-dir.y, dir.x);
+    vec3 alt = ink.g > ink.r ? uRed : uCyan;
+    color += alt * orientedLine(local + perp * 0.07, dir, halfLen * 0.72, thick * 0.85) * intensity * 0.55;
   }
 
-  if (useLine > 0.5 && edgeAmt > 0.5 && h3 > 0.72) {
-    float along = fract(dot(local, tangent) * 1.6 + h * 2.0);
-    float dash = step(0.22, along) * step(along, 0.78);
-    vec2 shift = tangent * mix(-0.12, 0.12, h2);
-    color += uWhite * orientedLine(local + shift, tangent, halfLen * 0.42, thick * 0.7) * dash * intensity * 0.28 * edgeAmt;
+  color += ink * markDot(local) * intensity * 0.85 * useDot;
+  color += mix(ink, uWhite, 0.35) * markPlus(local, 0.11) * intensity * useCross;
+
+  if (uGlitch > 0.004 && uAnimSpeed > 0.01) {
+    float gPulse = step(0.996, hash21(cellId + vec2(floor(uTime * uAnimSpeed), 9.0)));
+    color *= 1.0 - gPulse * uGlitch * 0.35;
   }
 
-  color += mix(uCyan, uWhite, 0.25) * markDot(local) * intensity * 0.72 * useDot;
-  color += uWhite * markPlus(local, 0.16) * intensity * 0.9 * useCross;
-
-  if (uGlitch > 0.004) {
-    float gPulse = step(0.993, hash21(cellId + vec2(floor(uTime * 1.2), 9.0)));
-    color *= 1.0 - gPulse * uGlitch * 0.4;
-  }
-
-  return color * step(0.001, occupancy);
+  return color;
 }
 
 void main() {
@@ -288,9 +254,28 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
   target.texture.name = 'TechnicalLens.scene'
   target.depthTexture = depthTexture
 
+  const normalSize = new THREE.Vector2(
+    Math.max(1, Math.floor(size.x * NORMAL_SCALE)),
+    Math.max(1, Math.floor(size.y * NORMAL_SCALE)),
+  )
+  const normalTarget = new THREE.WebGLRenderTarget(normalSize.x, normalSize.y, {
+    minFilter: THREE.NearestFilter,
+    magFilter: THREE.NearestFilter,
+    type: THREE.UnsignedByteType,
+    colorSpace: THREE.NoColorSpace,
+    depthBuffer: true,
+    stencilBuffer: false,
+    samples: 0,
+  })
+  normalTarget.texture.name = 'TechnicalLens.normal'
+
+  const normalMaterial = new THREE.MeshNormalMaterial()
+  const normalClear = new THREE.Color(0.5, 0.5, 0.5)
+
   const uniforms = {
     tScene: { value: target.texture },
     tDepth: { value: depthTexture },
+    tNormal: { value: normalTarget.texture },
     uResolution: { value: size.clone() },
     uPointer: { value: new THREE.Vector2(-1e6, -1e6) },
     uLensSize: { value: params.lensSize },
@@ -299,12 +284,8 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     uEnabled: { value: params.enabled ? 1 : 0 },
     uTime: { value: 0 },
     uDepthEdge: { value: params.depthEdge },
-    uColorEdge: { value: params.colorEdge },
-    uDepthCoarse: { value: params.depthCoarse },
-    uDepthFine: { value: params.depthFine },
     uSurfaceDensity: { value: params.surfaceDensity },
     uBackgroundDensity: { value: params.backgroundDensity },
-    uTextureInfluence: { value: params.textureInfluence },
     uMarkBrightness: { value: params.markBrightness },
     uVectorLength: { value: params.vectorLength },
     uGlitch: { value: params.glitch },
@@ -348,7 +329,11 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     const w = Math.max(1, Math.floor(size.x))
     const h = Math.max(1, Math.floor(size.y))
     if (target.width !== w || target.height !== h) target.setSize(w, h)
+    const nw = Math.max(1, Math.floor(w * NORMAL_SCALE))
+    const nh = Math.max(1, Math.floor(h * NORMAL_SCALE))
+    if (normalTarget.width !== nw || normalTarget.height !== nh) normalTarget.setSize(nw, nh)
     uniforms.tDepth.value = depthTexture
+    uniforms.tNormal.value = normalTarget.texture
     syncSizeUniforms()
   }
 
@@ -369,25 +354,38 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     uniforms.uEnabled.value = params.enabled ? 1 : 0
     uniforms.uActive.value = pointerActive && params.enabled ? 1 : 0
     uniforms.uDepthEdge.value = params.depthEdge
-    uniforms.uColorEdge.value = params.colorEdge
-    uniforms.uDepthCoarse.value = params.depthCoarse
-    uniforms.uDepthFine.value = params.depthFine
     uniforms.uSurfaceDensity.value = params.surfaceDensity
     uniforms.uBackgroundDensity.value = params.backgroundDensity
-    uniforms.uTextureInfluence.value = params.textureInfluence
     uniforms.uMarkBrightness.value = params.markBrightness
     uniforms.uVectorLength.value = params.vectorLength
     uniforms.uGlitch.value = params.glitch
     uniforms.uAnimSpeed.value = params.animSpeed
     uniforms.tDepth.value = depthTexture
+    uniforms.tNormal.value = normalTarget.texture
     if (camera instanceof THREE.PerspectiveCamera) {
       uniforms.uCameraNear.value = camera.near
       uniforms.uCameraFar.value = camera.far
     }
     syncSizeUniforms()
 
+    const prevShadow = renderer.shadowMap.enabled
+    const prevBackground = scene.background
+    const prevOverride = scene.overrideMaterial
+
     renderer.setRenderTarget(target)
     renderer.render(scene, camera)
+
+    if (pointerActive && params.enabled) {
+      renderer.shadowMap.enabled = false
+      scene.background = normalClear
+      scene.overrideMaterial = normalMaterial
+      renderer.setRenderTarget(normalTarget)
+      renderer.render(scene, camera)
+      scene.overrideMaterial = prevOverride
+      scene.background = prevBackground
+      renderer.shadowMap.enabled = prevShadow
+    }
+
     renderer.setRenderTarget(null)
     quad.render(renderer)
   }
@@ -395,6 +393,8 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
   const dispose = () => {
     target.dispose()
     depthTexture.dispose()
+    normalTarget.dispose()
+    normalMaterial.dispose()
     material.dispose()
     quad.dispose()
   }
