@@ -208,6 +208,15 @@ function prepareScanMaterial(source: THREE.Material, anisotropy: number) {
     depthTest: true,
   })
 
+  const detail = source as THREE.MeshStandardMaterial
+  mat.normalMap = detail.normalMap ?? null
+  if (detail.normalScale) mat.normalScale.copy(detail.normalScale)
+  if (detail.normalMapType !== undefined) mat.normalMapType = detail.normalMapType
+  mat.bumpMap = detail.bumpMap ?? null
+  mat.bumpScale = detail.bumpScale ?? 1
+  mat.aoMap = detail.aoMap ?? null
+  mat.aoMapIntensity = detail.aoMapIntensity ?? 1
+
   if (map) {
     mat.customProgramCacheKey = () => 'scan-albedo'
     mat.onBeforeCompile = (shader) => {
