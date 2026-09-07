@@ -5,11 +5,13 @@ export type LensParams = {
   enabled: boolean
   lensSize: number
   cellSize: number
-  edgeStrength: number
-  coarseInfluence: number
-  fineInfluence: number
-  lumaInfluence: number
-  ambientDensity: number
+  depthEdge: number
+  colorEdge: number
+  depthCoarse: number
+  depthFine: number
+  surfaceDensity: number
+  backgroundDensity: number
+  textureInfluence: number
   markBrightness: number
   vectorLength: number
   glitch: number
@@ -19,16 +21,18 @@ export type LensParams = {
 export const DEFAULT_LENS: LensParams = {
   enabled: true,
   lensSize: 240,
-  cellSize: 7,
-  edgeStrength: 2.0,
-  coarseInfluence: 0.72,
-  fineInfluence: 0.28,
-  lumaInfluence: 0.14,
-  ambientDensity: 0.28,
-  markBrightness: 1.12,
-  vectorLength: 0.58,
-  glitch: 0.016,
-  animSpeed: 0.3,
+  cellSize: 10,
+  depthEdge: 2.2,
+  colorEdge: 0.25,
+  depthCoarse: 1.0,
+  depthFine: 0.4,
+  surfaceDensity: 0.28,
+  backgroundDensity: 0.06,
+  textureInfluence: 0.12,
+  markBrightness: 1.15,
+  vectorLength: 0.78,
+  glitch: 0.01,
+  animSpeed: 0.25,
 }
 
 const VERTEX = /* glsl */ `
@@ -41,7 +45,11 @@ void main() {
 `
 
 const FRAGMENT = /* glsl */ `
+#include <common>
+#include <packing>
+
 uniform sampler2D tScene;
+uniform sampler2D tDepth;
 uniform vec2 uResolution;
 uniform vec2 uPointer;
 uniform float uLensSize;
@@ -49,18 +57,21 @@ uniform float uCellSize;
 uniform float uActive;
 uniform float uEnabled;
 uniform float uTime;
-uniform float uEdgeStrength;
-uniform float uCoarse;
-uniform float uFine;
-uniform float uLumaInfluence;
-uniform float uAmbient;
+uniform float uDepthEdge;
+uniform float uColorEdge;
+uniform float uDepthCoarse;
+uniform float uDepthFine;
+uniform float uSurfaceDensity;
+uniform float uBackgroundDensity;
+uniform float uTextureInfluence;
 uniform float uMarkBrightness;
 uniform float uVectorLength;
 uniform float uGlitch;
 uniform float uAnimSpeed;
+uniform float uCameraNear;
+uniform float uCameraFar;
 uniform vec3 uCyan;
 uniform vec3 uRed;
-uniform vec3 uYellow;
 uniform vec3 uWhite;
 
 varying vec2 vUv;
@@ -93,22 +104,23 @@ float orientedLine(vec2 p, vec2 dir, float halfLen, float thick) {
 }
 
 float markDot(vec2 p) {
-  return stroke(length(p) - 0.012, 0.02);
+  return stroke(length(p) - 0.012, 0.018);
 }
 
 float markPlus(vec2 p, float s) {
-  float a = stroke(sdSegment(p, vec2(-s, 0.0), vec2(s, 0.0)), 0.015);
-  float b = stroke(sdSegment(p, vec2(0.0, -s), vec2(0.0, s)), 0.015);
+  float a = stroke(sdSegment(p, vec2(-s, 0.0), vec2(s, 0.0)), 0.012);
+  float b = stroke(sdSegment(p, vec2(0.0, -s), vec2(0.0, s)), 0.012);
   return max(a, b);
 }
 
-float markX(vec2 p, float s) {
-  float a = stroke(sdSegment(p, vec2(-s, -s), vec2(s, s)), 0.015);
-  float b = stroke(sdSegment(p, vec2(-s, s), vec2(s, -s)), 0.015);
-  return max(a, b);
+float readEyeDepth(vec2 uv) {
+  vec2 t = clamp(uv, vec2(0.001), vec2(0.999));
+  float d = texture2D(tDepth, t).x;
+  float viewZ = perspectiveDepthToViewZ(d, uCameraNear, uCameraFar);
+  return -viewZ;
 }
 
-vec2 imageGrad(vec2 uv, float distPx) {
+vec2 colorGrad(vec2 uv, float distPx) {
   vec2 span = vec2(distPx) / uResolution;
   float lL = luma(texture2D(tScene, uv - vec2(span.x, 0.0)).rgb);
   float lR = luma(texture2D(tScene, uv + vec2(span.x, 0.0)).rgb);
@@ -117,87 +129,128 @@ vec2 imageGrad(vec2 uv, float distPx) {
   return vec2(lR - lL, lU - lD);
 }
 
-vec3 fieldColor(vec2 tangent, float structure, float h) {
+vec2 depthGrad(vec2 uv, float distPx) {
+  vec2 span = vec2(distPx) / uResolution;
+  float dL = readEyeDepth(uv - vec2(span.x, 0.0));
+  float dR = readEyeDepth(uv + vec2(span.x, 0.0));
+  float dD = readEyeDepth(uv - vec2(0.0, span.y));
+  float dU = readEyeDepth(uv + vec2(0.0, span.y));
+  return vec2(dR - dL, dU - dD);
+}
+
+vec3 fieldColor(vec2 tangent, float edgeAmt, float h) {
   float horiz = abs(tangent.x);
-  vec3 color = mix(uRed, uCyan, smoothstep(0.32, 0.68, horiz));
-  color = mix(color, mix(uCyan, uRed, h), 0.12);
-  if (structure > 0.34 && h > 0.72) color = mix(color, uWhite, 0.55);
-  else if (structure > 0.22 && h > 0.9) color = mix(color, uWhite, 0.28);
-  if (h > 0.985 && structure > 0.18) color = mix(color, uYellow, 0.45);
+  vec3 color = mix(uRed, uCyan, smoothstep(0.28, 0.72, horiz));
+  color = mix(color, mix(uCyan, uRed, step(h, 0.5)), 0.14 * (1.0 - abs(abs(tangent.x) - abs(tangent.y))));
+  color = mix(color, uWhite, edgeAmt * 0.78);
   return color;
 }
 
 vec3 technical(vec2 frag) {
-  float cell = max(uCellSize, 3.0);
+  float cell = max(uCellSize, 6.0);
   vec2 cellId = floor(frag / cell);
   vec2 origin = cellId * cell;
-  vec2 local = (frag - origin) / cell - 0.5;
 
   float h = hash21(cellId);
   float h2 = hash21(cellId + 19.17);
   float h3 = hash21(cellId.yx + 4.2);
-  float tq = floor(uTime / mix(0.48, 0.22, clamp(uAnimSpeed, 0.0, 1.0)));
-  float ht = hash21(cellId + vec2(tq, 8.0));
+  float hOcc = hash21(cellId + 41.7);
+  float hMark = hash21(cellId + 71.3);
 
-  local += vec2(h - 0.5, h2 - 0.5) * 0.16;
-  vec2 center = origin + cell * (0.5 + vec2(h - 0.5, h3 - 0.5) * 0.1);
-  vec2 uv = center / uResolution;
+  vec2 jitter = vec2(h - 0.5, h2 - 0.5) * 0.40;
+  vec2 local = (frag - origin) / cell - 0.5 - jitter * 0.5;
+  vec2 center = origin + cell * (0.5 + jitter * 0.5);
+  vec2 uv = clamp(center / uResolution, vec2(0.002), vec2(0.998));
 
-  vec2 gFine = imageGrad(uv, cell * 0.5);
-  vec2 gCoarse = imageGrad(uv, cell * 1.7);
-  vec2 g = gCoarse * uCoarse + gFine * uFine;
-  float magFine = length(gFine);
-  float magCoarse = length(gCoarse);
-  float mag = length(g);
-  vec2 tangent = vec2(-g.y, g.x);
-  tangent *= inversesqrt(max(dot(tangent, tangent), 1e-8));
+  float eyeDepth = readEyeDepth(uv);
+  float isSky = step(uCameraFar * 0.78, eyeDepth);
+  float invDepth = 1.0 / max(eyeDepth, 0.15);
 
-  float l = luma(texture2D(tScene, uv).rgb);
-  float structure =
-    magCoarse * uEdgeStrength +
-    magFine * uEdgeStrength * 0.32 +
-    l * uLumaInfluence;
+  vec2 dFine = depthGrad(uv, cell * 0.55);
+  vec2 dCoarse = depthGrad(uv, cell * 1.75);
+  vec2 dWide = depthGrad(uv, cell * 4.2);
+  vec2 cFine = colorGrad(uv, cell * 0.55);
+  vec2 cCoarse = colorGrad(uv, cell * 1.75);
 
-  float lenJitter = mix(0.88, 1.08, h2);
-  float liveLen = mix(1.0, mix(0.94, 1.05, ht), uGlitch * 4.0);
-  float halfLen = clamp(uVectorLength * 0.5 * lenJitter * liveLen, 0.16, 0.38);
-  float thick = mix(0.011, 0.016, smoothstep(0.08, 0.3, magCoarse));
-  float liveBright = mix(1.0, mix(0.88, 1.06, ht), 0.35 + uAnimSpeed * 0.2);
+  float magDFine = length(dFine) * invDepth;
+  float magDCoarse = length(dCoarse) * invDepth;
+  float magDWide = length(dWide) * invDepth;
+  float magCFine = length(cFine);
+  float magCCoarse = length(cCoarse);
 
-  vec3 color = vec3(0.0);
+  float geometryStructure =
+    magDCoarse * 14.0 * uDepthCoarse +
+    magDFine * 5.5 * uDepthFine;
+  float textureStructure =
+    magCCoarse * 0.2 * uTextureInfluence +
+    magCFine * 0.08 * uTextureInfluence;
+  float structure = geometryStructure * uDepthEdge + textureStructure * uColorEdge;
 
-  if (structure > 0.11) {
-    float edge = smoothstep(0.11, 0.36, structure);
-    float intensity = mix(0.55, 1.0, edge) * uMarkBrightness * mix(0.9, 1.08, h) * liveBright;
-    float gLine = orientedLine(local, tangent, halfLen * mix(0.78, 1.05, edge), thick);
-    color += fieldColor(tangent, structure, h) * gLine * intensity;
+  float edgeAmt = smoothstep(0.55, 2.4, geometryStructure);
+  float nearFeature = smoothstep(0.18, 0.85, magDWide);
 
-    if (structure > 0.26 && h2 > 0.52 && h2 < 0.78) {
-      vec2 normal = vec2(-tangent.y, tangent.x);
-      float off = mix(0.5, 1.35, h3) / cell;
-      float g2 = orientedLine(local + normal * off, tangent, halfLen * 0.82, thick * 0.75);
-      vec3 alt = mix(uRed, uCyan, 1.0 - smoothstep(0.32, 0.68, abs(tangent.x)));
-      color += alt * g2 * intensity * 0.42;
-    }
+  float occupancy = mix(uBackgroundDensity, uBackgroundDensity * 1.15, 1.0 - isSky);
+  occupancy = mix(occupancy, uSurfaceDensity * 0.38, (1.0 - isSky) * smoothstep(0.18, 0.7, geometryStructure));
+  occupancy = mix(occupancy, uSurfaceDensity * 0.85, (1.0 - isSky) * smoothstep(0.55, 1.35, geometryStructure));
+  occupancy = mix(
+    occupancy,
+    mix(0.72, 0.88, clamp((geometryStructure - 1.35) * 0.32, 0.0, 1.0)),
+    (1.0 - isSky) * edgeAmt
+  );
+  occupancy = mix(occupancy, occupancy * 1.2, (1.0 - isSky) * nearFeature * (1.0 - edgeAmt) * 0.4);
+  occupancy = clamp(occupancy, 0.0, 0.90);
 
-    if (structure > 0.28 && h > 0.9) {
-      float punct = h > 0.96 ? markX(local, 0.16) : markPlus(local, 0.18);
-      color += mix(uWhite, uCyan, 0.35) * punct * intensity * 0.95;
-    }
+  if (hOcc > occupancy) return vec3(0.0);
+
+  vec2 gDepth = dCoarse + dFine * 0.35;
+  float gLen = length(gDepth);
+  vec2 tangent;
+  if (gLen > 1e-5) {
+    tangent = normalize(vec2(-gDepth.y, gDepth.x));
   } else {
-    float appear = step(1.0 - uAmbient, h);
-    float flicker = mix(appear, step(1.0 - uAmbient * mix(0.85, 1.15, ht), h3), 0.25);
-    if (flicker < 0.5) return vec3(0.0);
-    float dim = 0.16 * uMarkBrightness * mix(0.75, 1.0, h2) * liveBright;
-    if (h3 > 0.62) {
-      vec2 fallback = normalize(mix(vec2(1.0, 0.12), tangent, 0.35));
-      color += mix(uCyan, uRed, step(0.55, h)) * orientedLine(local, fallback, 0.12, 0.012) * dim;
-    } else {
-      color += mix(uCyan, uWhite, 0.2) * markDot(local) * dim * 1.15;
-    }
+    vec2 gColor = cCoarse * 0.35 + cFine * 0.12;
+    float cLen = length(gColor);
+    tangent = cLen > 1e-5 ? normalize(vec2(-gColor.y, gColor.x)) : vec2(1.0, 0.0);
   }
 
-  return color;
+  float breath = 0.97 + 0.03 * sin(uTime * (0.4 + uAnimSpeed * 0.5) + h * 6.28318);
+  float halfLen = mix(0.32, 0.44, edgeAmt) * (uVectorLength / 0.72) * mix(0.98, 1.03, h2) * breath;
+  halfLen = clamp(halfLen, 0.26, 0.50);
+  float thick = mix(0.008, 0.014, edgeAmt);
+
+  float useCross = step(2.8, geometryStructure) * step(0.985, hMark) * (1.0 - isSky);
+  float useDot = (1.0 - useCross) * step(hMark, 0.075) * (1.0 - step(1.0, geometryStructure));
+  float useLine = 1.0 - useCross - useDot;
+
+  vec3 color = vec3(0.0);
+  vec3 ink = fieldColor(tangent, edgeAmt, h);
+  float intensity = mix(0.48, 1.12, edgeAmt) * uMarkBrightness * breath * mix(0.4, 1.0, 1.0 - isSky);
+
+  color += ink * orientedLine(local, tangent, halfLen, thick) * intensity * useLine;
+
+  if (useLine > 0.5 && edgeAmt > 0.62 && h2 > 0.7) {
+    vec2 normal = vec2(-tangent.y, tangent.x);
+    float off = mix(0.05, 0.085, h3);
+    vec3 alt = mix(uRed, uCyan, 1.0 - smoothstep(0.28, 0.72, abs(tangent.x)));
+    color += alt * orientedLine(local + normal * off, tangent, halfLen * 0.78, thick * 0.65) * intensity * 0.32;
+  }
+
+  if (useLine > 0.5 && edgeAmt > 0.5 && h3 > 0.72) {
+    float along = fract(dot(local, tangent) * 1.6 + h * 2.0);
+    float dash = step(0.22, along) * step(along, 0.78);
+    vec2 shift = tangent * mix(-0.12, 0.12, h2);
+    color += uWhite * orientedLine(local + shift, tangent, halfLen * 0.42, thick * 0.7) * dash * intensity * 0.28 * edgeAmt;
+  }
+
+  color += mix(uCyan, uWhite, 0.25) * markDot(local) * intensity * 0.72 * useDot;
+  color += uWhite * markPlus(local, 0.16) * intensity * 0.9 * useCross;
+
+  if (uGlitch > 0.004) {
+    float gPulse = step(0.993, hash21(cellId + vec2(floor(uTime * 1.2), 9.0)));
+    color *= 1.0 - gPulse * uGlitch * 0.4;
+  }
+
+  return color * step(0.001, occupancy);
 }
 
 void main() {
@@ -216,6 +269,12 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
   const size = new THREE.Vector2()
   renderer.getDrawingBufferSize(size)
 
+  const depthTexture = new THREE.DepthTexture(size.x, size.y, THREE.UnsignedIntType)
+  depthTexture.format = THREE.DepthFormat
+  depthTexture.minFilter = THREE.NearestFilter
+  depthTexture.magFilter = THREE.NearestFilter
+  depthTexture.generateMipmaps = false
+
   const target = new THREE.WebGLRenderTarget(size.x, size.y, {
     minFilter: THREE.LinearFilter,
     magFilter: THREE.LinearFilter,
@@ -224,11 +283,14 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     depthBuffer: true,
     stencilBuffer: false,
     samples: 4,
+    depthTexture,
   })
   target.texture.name = 'TechnicalLens.scene'
+  target.depthTexture = depthTexture
 
   const uniforms = {
     tScene: { value: target.texture },
+    tDepth: { value: depthTexture },
     uResolution: { value: size.clone() },
     uPointer: { value: new THREE.Vector2(-1e6, -1e6) },
     uLensSize: { value: params.lensSize },
@@ -236,18 +298,21 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     uActive: { value: 0 },
     uEnabled: { value: params.enabled ? 1 : 0 },
     uTime: { value: 0 },
-    uEdgeStrength: { value: params.edgeStrength },
-    uCoarse: { value: params.coarseInfluence },
-    uFine: { value: params.fineInfluence },
-    uLumaInfluence: { value: params.lumaInfluence },
-    uAmbient: { value: params.ambientDensity },
+    uDepthEdge: { value: params.depthEdge },
+    uColorEdge: { value: params.colorEdge },
+    uDepthCoarse: { value: params.depthCoarse },
+    uDepthFine: { value: params.depthFine },
+    uSurfaceDensity: { value: params.surfaceDensity },
+    uBackgroundDensity: { value: params.backgroundDensity },
+    uTextureInfluence: { value: params.textureInfluence },
     uMarkBrightness: { value: params.markBrightness },
     uVectorLength: { value: params.vectorLength },
     uGlitch: { value: params.glitch },
     uAnimSpeed: { value: params.animSpeed },
+    uCameraNear: { value: 0.1 },
+    uCameraFar: { value: 48 },
     uCyan: { value: new THREE.Color('#36DDF5') },
     uRed: { value: new THREE.Color('#FF3B61') },
-    uYellow: { value: new THREE.Color('#FFE18A') },
     uWhite: { value: new THREE.Color('#DCEEFF') },
   }
 
@@ -283,6 +348,7 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     const w = Math.max(1, Math.floor(size.x))
     const h = Math.max(1, Math.floor(size.y))
     if (target.width !== w || target.height !== h) target.setSize(w, h)
+    uniforms.tDepth.value = depthTexture
     syncSizeUniforms()
   }
 
@@ -302,15 +368,22 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     uniforms.uTime.value = time
     uniforms.uEnabled.value = params.enabled ? 1 : 0
     uniforms.uActive.value = pointerActive && params.enabled ? 1 : 0
-    uniforms.uEdgeStrength.value = params.edgeStrength
-    uniforms.uCoarse.value = params.coarseInfluence
-    uniforms.uFine.value = params.fineInfluence
-    uniforms.uLumaInfluence.value = params.lumaInfluence
-    uniforms.uAmbient.value = params.ambientDensity
+    uniforms.uDepthEdge.value = params.depthEdge
+    uniforms.uColorEdge.value = params.colorEdge
+    uniforms.uDepthCoarse.value = params.depthCoarse
+    uniforms.uDepthFine.value = params.depthFine
+    uniforms.uSurfaceDensity.value = params.surfaceDensity
+    uniforms.uBackgroundDensity.value = params.backgroundDensity
+    uniforms.uTextureInfluence.value = params.textureInfluence
     uniforms.uMarkBrightness.value = params.markBrightness
     uniforms.uVectorLength.value = params.vectorLength
     uniforms.uGlitch.value = params.glitch
     uniforms.uAnimSpeed.value = params.animSpeed
+    uniforms.tDepth.value = depthTexture
+    if (camera instanceof THREE.PerspectiveCamera) {
+      uniforms.uCameraNear.value = camera.near
+      uniforms.uCameraFar.value = camera.far
+    }
     syncSizeUniforms()
 
     renderer.setRenderTarget(target)
@@ -321,6 +394,7 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
 
   const dispose = () => {
     target.dispose()
+    depthTexture.dispose()
     material.dispose()
     quad.dispose()
   }
