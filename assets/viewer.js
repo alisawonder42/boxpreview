@@ -4253,7 +4253,7 @@ void main() {
 }`;function $0(s){const e=document.createElement("style");e.innerHTML=s;const t=document.querySelector("head link[rel=stylesheet], head style");t?document.head.insertBefore(e,t):document.head.appendChild(e)}let Cc=!1;class el{constructor({parent:e,autoPlace:t=e===void 0,container:n,width:i,title:r="Controls",closeFolders:a=!1,injectStyles:o=!0,touchStyles:l=!0}={}){if(this.parent=e,this.root=e?e.root:this,this.children=[],this.controllers=[],this.folders=[],this._closed=!1,this._hidden=!1,this.domElement=document.createElement("div"),this.domElement.classList.add("lil-gui"),this.$title=document.createElement("button"),this.$title.classList.add("lil-title"),this.$title.setAttribute("aria-expanded",!0),this.$title.addEventListener("click",()=>this.openAnimated(this._closed)),this.$title.addEventListener("touchstart",()=>{},{passive:!0}),this.$children=document.createElement("div"),this.$children.classList.add("lil-children"),this.domElement.appendChild(this.$title),this.domElement.appendChild(this.$children),this.title(r),this.parent){this.parent.children.push(this),this.parent.folders.push(this),this.parent.$children.appendChild(this.domElement);return}this.domElement.classList.add("lil-root"),l&&this.domElement.classList.add("lil-allow-touch-styles"),!Cc&&o&&($0(q0),Cc=!0),n?n.appendChild(this.domElement):t&&(this.domElement.classList.add("lil-auto-place","autoPlace"),document.body.appendChild(this.domElement)),i&&this.domElement.style.setProperty("--width",i+"px"),this._closeFolders=a}add(e,t,n,i,r){if(Object(n)===n)return new Y0(this,e,t,n);const a=e[t];switch(typeof a){case"number":return new X0(this,e,t,n,i,r);case"boolean":return new B0(this,e,t);case"string":return new j0(this,e,t);case"function":return new Ta(this,e,t)}console.error(`gui.add failed
 	property:`,t,`
 	object:`,e,`
-	value:`,a)}addColor(e,t,n=1){return new W0(this,e,t,n)}addFolder(e){const t=new el({parent:this,title:e});return this.root._closeFolders&&t.close(),t}load(e,t=!0){return e.controllers&&this.controllers.forEach(n=>{n instanceof Ta||n._name in e.controllers&&n.load(e.controllers[n._name])}),t&&e.folders&&this.folders.forEach(n=>{n._title in e.folders&&n.load(e.folders[n._title])}),this}save(e=!0){const t={controllers:{},folders:{}};return this.controllers.forEach(n=>{if(!(n instanceof Ta)){if(n._name in t.controllers)throw new Error(`Cannot save GUI with duplicate property "${n._name}"`);t.controllers[n._name]=n.save()}}),e&&this.folders.forEach(n=>{if(n._title in t.folders)throw new Error(`Cannot save GUI with duplicate folder "${n._title}"`);t.folders[n._title]=n.save()}),t}open(e=!0){return this._setClosed(!e),this.$title.setAttribute("aria-expanded",!this._closed),this.domElement.classList.toggle("lil-closed",this._closed),this}close(){return this.open(!1)}_setClosed(e){this._closed!==e&&(this._closed=e,this._callOnOpenClose(this))}show(e=!0){return this._hidden=!e,this.domElement.style.display=this._hidden?"none":"",this}hide(){return this.show(!1)}openAnimated(e=!0){return this._setClosed(!e),this.$title.setAttribute("aria-expanded",!this._closed),requestAnimationFrame(()=>{const t=this.$children.clientHeight;this.$children.style.height=t+"px",this.domElement.classList.add("lil-transition");const n=r=>{r.target===this.$children&&(this.$children.style.height="",this.domElement.classList.remove("lil-transition"),this.$children.removeEventListener("transitionend",n))};this.$children.addEventListener("transitionend",n);const i=e?this.$children.scrollHeight:0;this.domElement.classList.toggle("lil-closed",!e),requestAnimationFrame(()=>{this.$children.style.height=i+"px"})}),this}title(e){return this._title=e,this.$title.textContent=e,this}reset(e=!0){return(e?this.controllersRecursive():this.controllers).forEach(n=>n.reset()),this}onChange(e){return this._onChange=e,this}_callOnChange(e){this.parent&&this.parent._callOnChange(e),this._onChange!==void 0&&this._onChange.call(this,{object:e.object,property:e.property,value:e.getValue(),controller:e})}onFinishChange(e){return this._onFinishChange=e,this}_callOnFinishChange(e){this.parent&&this.parent._callOnFinishChange(e),this._onFinishChange!==void 0&&this._onFinishChange.call(this,{object:e.object,property:e.property,value:e.getValue(),controller:e})}onOpenClose(e){return this._onOpenClose=e,this}_callOnOpenClose(e){this.parent&&this.parent._callOnOpenClose(e),this._onOpenClose!==void 0&&this._onOpenClose.call(this,e)}destroy(){this.parent&&(this.parent.children.splice(this.parent.children.indexOf(this),1),this.parent.folders.splice(this.parent.folders.indexOf(this),1)),this.domElement.parentElement&&this.domElement.parentElement.removeChild(this.domElement),Array.from(this.children).forEach(e=>e.destroy())}controllersRecursive(){let e=Array.from(this.controllers);return this.folders.forEach(t=>{e=e.concat(t.controllersRecursive())}),e}foldersRecursive(){let e=Array.from(this.folders);return this.folders.forEach(t=>{e=e.concat(t.foldersRecursive())}),e}}const K0=new Or(-1,1,1,-1,0,1);class Z0 extends Wt{constructor(){super(),this.setAttribute("position",new Ct([-1,3,0,-1,-1,0,3,-1,0],3)),this.setAttribute("uv",new Ct([0,2,0,0,2,0],2))}}const J0=new Z0;class Q0{constructor(e){this._mesh=new at(J0,e)}dispose(){this._mesh.geometry.dispose()}render(e){e.render(this._mesh,K0)}get material(){return this._mesh.material}set material(e){this._mesh.material=e}}const Dh={enabled:!0,lensSize:240,cellSize:10,depthEdge:2.2,colorEdge:.25,depthCoarse:1,depthFine:.4,surfaceDensity:.28,backgroundDensity:.06,textureInfluence:.12,markBrightness:1.15,vectorLength:.72,glitch:.01,animSpeed:.25},ev=`
+	value:`,a)}addColor(e,t,n=1){return new W0(this,e,t,n)}addFolder(e){const t=new el({parent:this,title:e});return this.root._closeFolders&&t.close(),t}load(e,t=!0){return e.controllers&&this.controllers.forEach(n=>{n instanceof Ta||n._name in e.controllers&&n.load(e.controllers[n._name])}),t&&e.folders&&this.folders.forEach(n=>{n._title in e.folders&&n.load(e.folders[n._title])}),this}save(e=!0){const t={controllers:{},folders:{}};return this.controllers.forEach(n=>{if(!(n instanceof Ta)){if(n._name in t.controllers)throw new Error(`Cannot save GUI with duplicate property "${n._name}"`);t.controllers[n._name]=n.save()}}),e&&this.folders.forEach(n=>{if(n._title in t.folders)throw new Error(`Cannot save GUI with duplicate folder "${n._title}"`);t.folders[n._title]=n.save()}),t}open(e=!0){return this._setClosed(!e),this.$title.setAttribute("aria-expanded",!this._closed),this.domElement.classList.toggle("lil-closed",this._closed),this}close(){return this.open(!1)}_setClosed(e){this._closed!==e&&(this._closed=e,this._callOnOpenClose(this))}show(e=!0){return this._hidden=!e,this.domElement.style.display=this._hidden?"none":"",this}hide(){return this.show(!1)}openAnimated(e=!0){return this._setClosed(!e),this.$title.setAttribute("aria-expanded",!this._closed),requestAnimationFrame(()=>{const t=this.$children.clientHeight;this.$children.style.height=t+"px",this.domElement.classList.add("lil-transition");const n=r=>{r.target===this.$children&&(this.$children.style.height="",this.domElement.classList.remove("lil-transition"),this.$children.removeEventListener("transitionend",n))};this.$children.addEventListener("transitionend",n);const i=e?this.$children.scrollHeight:0;this.domElement.classList.toggle("lil-closed",!e),requestAnimationFrame(()=>{this.$children.style.height=i+"px"})}),this}title(e){return this._title=e,this.$title.textContent=e,this}reset(e=!0){return(e?this.controllersRecursive():this.controllers).forEach(n=>n.reset()),this}onChange(e){return this._onChange=e,this}_callOnChange(e){this.parent&&this.parent._callOnChange(e),this._onChange!==void 0&&this._onChange.call(this,{object:e.object,property:e.property,value:e.getValue(),controller:e})}onFinishChange(e){return this._onFinishChange=e,this}_callOnFinishChange(e){this.parent&&this.parent._callOnFinishChange(e),this._onFinishChange!==void 0&&this._onFinishChange.call(this,{object:e.object,property:e.property,value:e.getValue(),controller:e})}onOpenClose(e){return this._onOpenClose=e,this}_callOnOpenClose(e){this.parent&&this.parent._callOnOpenClose(e),this._onOpenClose!==void 0&&this._onOpenClose.call(this,e)}destroy(){this.parent&&(this.parent.children.splice(this.parent.children.indexOf(this),1),this.parent.folders.splice(this.parent.folders.indexOf(this),1)),this.domElement.parentElement&&this.domElement.parentElement.removeChild(this.domElement),Array.from(this.children).forEach(e=>e.destroy())}controllersRecursive(){let e=Array.from(this.controllers);return this.folders.forEach(t=>{e=e.concat(t.controllersRecursive())}),e}foldersRecursive(){let e=Array.from(this.folders);return this.folders.forEach(t=>{e=e.concat(t.foldersRecursive())}),e}}const K0=new Or(-1,1,1,-1,0,1);class Z0 extends Wt{constructor(){super(),this.setAttribute("position",new Ct([-1,3,0,-1,-1,0,3,-1,0],3)),this.setAttribute("uv",new Ct([0,2,0,0,2,0],2))}}const J0=new Z0;class Q0{constructor(e){this._mesh=new at(J0,e)}dispose(){this._mesh.geometry.dispose()}render(e){e.render(this._mesh,K0)}get material(){return this._mesh.material}set material(e){this._mesh.material=e}}const Dh={enabled:!0,lensSize:240,cellSize:10,depthEdge:2.2,colorEdge:.25,depthCoarse:1,depthFine:.4,surfaceDensity:.28,backgroundDensity:.06,textureInfluence:.12,markBrightness:1.15,vectorLength:.78,glitch:.01,animSpeed:.25},ev=`
 varying vec2 vUv;
 
 void main() {
@@ -4373,7 +4373,7 @@ vec3 technical(vec2 frag) {
   float hOcc = hash21(cellId + 41.7);
   float hMark = hash21(cellId + 71.3);
 
-  vec2 jitter = vec2(h - 0.5, h2 - 0.5) * 0.34;
+  vec2 jitter = vec2(h - 0.5, h2 - 0.5) * 0.40;
   vec2 local = (frag - origin) / cell - 0.5 - jitter * 0.5;
   vec2 center = origin + cell * (0.5 + jitter * 0.5);
   vec2 uv = clamp(center / uResolution, vec2(0.002), vec2(0.998));
@@ -4405,16 +4405,16 @@ vec3 technical(vec2 frag) {
   float edgeAmt = smoothstep(0.55, 2.4, geometryStructure);
   float nearFeature = smoothstep(0.18, 0.85, magDWide);
 
-  float occupancy = mix(uBackgroundDensity, uBackgroundDensity * 1.35, 1.0 - isSky);
-  occupancy = mix(occupancy, uSurfaceDensity * 0.55, (1.0 - isSky) * smoothstep(0.12, 0.55, geometryStructure));
-  occupancy = mix(occupancy, uSurfaceDensity, (1.0 - isSky) * smoothstep(0.4, 1.15, geometryStructure));
+  float occupancy = mix(uBackgroundDensity, uBackgroundDensity * 1.15, 1.0 - isSky);
+  occupancy = mix(occupancy, uSurfaceDensity * 0.38, (1.0 - isSky) * smoothstep(0.18, 0.7, geometryStructure));
+  occupancy = mix(occupancy, uSurfaceDensity * 0.85, (1.0 - isSky) * smoothstep(0.55, 1.35, geometryStructure));
   occupancy = mix(
     occupancy,
-    mix(0.74, 0.90, clamp((geometryStructure - 1.2) * 0.35, 0.0, 1.0)),
+    mix(0.72, 0.88, clamp((geometryStructure - 1.35) * 0.32, 0.0, 1.0)),
     (1.0 - isSky) * edgeAmt
   );
-  occupancy = mix(occupancy, occupancy * 1.35, (1.0 - isSky) * nearFeature * (1.0 - edgeAmt) * 0.55);
-  occupancy = clamp(occupancy, 0.0, 0.92);
+  occupancy = mix(occupancy, occupancy * 1.2, (1.0 - isSky) * nearFeature * (1.0 - edgeAmt) * 0.4);
+  occupancy = clamp(occupancy, 0.0, 0.90);
 
   if (hOcc > occupancy) return vec3(0.0);
 
@@ -4429,13 +4429,13 @@ vec3 technical(vec2 frag) {
     tangent = cLen > 1e-5 ? normalize(vec2(-gColor.y, gColor.x)) : vec2(1.0, 0.0);
   }
 
-  float breath = 0.96 + 0.04 * sin(uTime * (0.45 + uAnimSpeed * 0.55) + h * 6.28318);
-  float halfLen = mix(0.275, 0.40, edgeAmt) * (uVectorLength / 0.72) * mix(0.97, 1.03, h2) * breath;
-  halfLen = clamp(halfLen, 0.22, 0.48);
-  float thick = mix(0.009, 0.016, edgeAmt);
+  float breath = 0.97 + 0.03 * sin(uTime * (0.4 + uAnimSpeed * 0.5) + h * 6.28318);
+  float halfLen = mix(0.32, 0.44, edgeAmt) * (uVectorLength / 0.72) * mix(0.98, 1.03, h2) * breath;
+  halfLen = clamp(halfLen, 0.26, 0.50);
+  float thick = mix(0.008, 0.014, edgeAmt);
 
-  float useCross = step(2.35, geometryStructure) * step(0.98, hMark) * (1.0 - isSky);
-  float useDot = (1.0 - useCross) * step(hMark, 0.08) * (1.0 - step(1.1, geometryStructure));
+  float useCross = step(2.8, geometryStructure) * step(0.985, hMark) * (1.0 - isSky);
+  float useDot = (1.0 - useCross) * step(hMark, 0.075) * (1.0 - step(1.0, geometryStructure));
   float useLine = 1.0 - useCross - useDot;
 
   vec3 color = vec3(0.0);
@@ -4444,18 +4444,18 @@ vec3 technical(vec2 frag) {
 
   color += ink * orientedLine(local, tangent, halfLen, thick) * intensity * useLine;
 
-  if (useLine > 0.5 && edgeAmt > 0.55 && h2 > 0.62) {
+  if (useLine > 0.5 && edgeAmt > 0.62 && h2 > 0.7) {
     vec2 normal = vec2(-tangent.y, tangent.x);
-    float off = mix(0.045, 0.08, h3);
+    float off = mix(0.05, 0.085, h3);
     vec3 alt = mix(uRed, uCyan, 1.0 - smoothstep(0.28, 0.72, abs(tangent.x)));
-    color += alt * orientedLine(local + normal * off, tangent, halfLen * 0.86, thick * 0.7) * intensity * 0.38;
+    color += alt * orientedLine(local + normal * off, tangent, halfLen * 0.78, thick * 0.65) * intensity * 0.32;
   }
 
-  if (useLine > 0.5 && edgeAmt > 0.4 && h3 > 0.58) {
-    float along = fract(dot(local, tangent) * 2.4 + h);
-    float dash = step(0.35, along) * step(along, 0.68);
-    vec2 nrm = vec2(-tangent.y, tangent.x);
-    color += uWhite * orientedLine(local, nrm, mix(0.10, 0.16, edgeAmt), 0.008) * dash * intensity * 0.42 * edgeAmt;
+  if (useLine > 0.5 && edgeAmt > 0.5 && h3 > 0.72) {
+    float along = fract(dot(local, tangent) * 1.6 + h * 2.0);
+    float dash = step(0.22, along) * step(along, 0.78);
+    vec2 shift = tangent * mix(-0.12, 0.12, h2);
+    color += uWhite * orientedLine(local + shift, tangent, halfLen * 0.42, thick * 0.7) * dash * intensity * 0.28 * edgeAmt;
   }
 
   color += mix(uCyan, uWhite, 0.25) * markDot(local) * intensity * 0.72 * useDot;

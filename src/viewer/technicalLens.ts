@@ -30,7 +30,7 @@ export const DEFAULT_LENS: LensParams = {
   backgroundDensity: 0.06,
   textureInfluence: 0.12,
   markBrightness: 1.15,
-  vectorLength: 0.72,
+  vectorLength: 0.78,
   glitch: 0.01,
   animSpeed: 0.25,
 }
@@ -157,7 +157,7 @@ vec3 technical(vec2 frag) {
   float hOcc = hash21(cellId + 41.7);
   float hMark = hash21(cellId + 71.3);
 
-  vec2 jitter = vec2(h - 0.5, h2 - 0.5) * 0.34;
+  vec2 jitter = vec2(h - 0.5, h2 - 0.5) * 0.40;
   vec2 local = (frag - origin) / cell - 0.5 - jitter * 0.5;
   vec2 center = origin + cell * (0.5 + jitter * 0.5);
   vec2 uv = clamp(center / uResolution, vec2(0.002), vec2(0.998));
@@ -189,16 +189,16 @@ vec3 technical(vec2 frag) {
   float edgeAmt = smoothstep(0.55, 2.4, geometryStructure);
   float nearFeature = smoothstep(0.18, 0.85, magDWide);
 
-  float occupancy = mix(uBackgroundDensity, uBackgroundDensity * 1.35, 1.0 - isSky);
-  occupancy = mix(occupancy, uSurfaceDensity * 0.55, (1.0 - isSky) * smoothstep(0.12, 0.55, geometryStructure));
-  occupancy = mix(occupancy, uSurfaceDensity, (1.0 - isSky) * smoothstep(0.4, 1.15, geometryStructure));
+  float occupancy = mix(uBackgroundDensity, uBackgroundDensity * 1.15, 1.0 - isSky);
+  occupancy = mix(occupancy, uSurfaceDensity * 0.38, (1.0 - isSky) * smoothstep(0.18, 0.7, geometryStructure));
+  occupancy = mix(occupancy, uSurfaceDensity * 0.85, (1.0 - isSky) * smoothstep(0.55, 1.35, geometryStructure));
   occupancy = mix(
     occupancy,
-    mix(0.74, 0.90, clamp((geometryStructure - 1.2) * 0.35, 0.0, 1.0)),
+    mix(0.72, 0.88, clamp((geometryStructure - 1.35) * 0.32, 0.0, 1.0)),
     (1.0 - isSky) * edgeAmt
   );
-  occupancy = mix(occupancy, occupancy * 1.35, (1.0 - isSky) * nearFeature * (1.0 - edgeAmt) * 0.55);
-  occupancy = clamp(occupancy, 0.0, 0.92);
+  occupancy = mix(occupancy, occupancy * 1.2, (1.0 - isSky) * nearFeature * (1.0 - edgeAmt) * 0.4);
+  occupancy = clamp(occupancy, 0.0, 0.90);
 
   if (hOcc > occupancy) return vec3(0.0);
 
@@ -213,13 +213,13 @@ vec3 technical(vec2 frag) {
     tangent = cLen > 1e-5 ? normalize(vec2(-gColor.y, gColor.x)) : vec2(1.0, 0.0);
   }
 
-  float breath = 0.96 + 0.04 * sin(uTime * (0.45 + uAnimSpeed * 0.55) + h * 6.28318);
-  float halfLen = mix(0.275, 0.40, edgeAmt) * (uVectorLength / 0.72) * mix(0.97, 1.03, h2) * breath;
-  halfLen = clamp(halfLen, 0.22, 0.48);
-  float thick = mix(0.009, 0.016, edgeAmt);
+  float breath = 0.97 + 0.03 * sin(uTime * (0.4 + uAnimSpeed * 0.5) + h * 6.28318);
+  float halfLen = mix(0.32, 0.44, edgeAmt) * (uVectorLength / 0.72) * mix(0.98, 1.03, h2) * breath;
+  halfLen = clamp(halfLen, 0.26, 0.50);
+  float thick = mix(0.008, 0.014, edgeAmt);
 
-  float useCross = step(2.35, geometryStructure) * step(0.98, hMark) * (1.0 - isSky);
-  float useDot = (1.0 - useCross) * step(hMark, 0.08) * (1.0 - step(1.1, geometryStructure));
+  float useCross = step(2.8, geometryStructure) * step(0.985, hMark) * (1.0 - isSky);
+  float useDot = (1.0 - useCross) * step(hMark, 0.075) * (1.0 - step(1.0, geometryStructure));
   float useLine = 1.0 - useCross - useDot;
 
   vec3 color = vec3(0.0);
@@ -228,18 +228,18 @@ vec3 technical(vec2 frag) {
 
   color += ink * orientedLine(local, tangent, halfLen, thick) * intensity * useLine;
 
-  if (useLine > 0.5 && edgeAmt > 0.55 && h2 > 0.62) {
+  if (useLine > 0.5 && edgeAmt > 0.62 && h2 > 0.7) {
     vec2 normal = vec2(-tangent.y, tangent.x);
-    float off = mix(0.045, 0.08, h3);
+    float off = mix(0.05, 0.085, h3);
     vec3 alt = mix(uRed, uCyan, 1.0 - smoothstep(0.28, 0.72, abs(tangent.x)));
-    color += alt * orientedLine(local + normal * off, tangent, halfLen * 0.86, thick * 0.7) * intensity * 0.38;
+    color += alt * orientedLine(local + normal * off, tangent, halfLen * 0.78, thick * 0.65) * intensity * 0.32;
   }
 
-  if (useLine > 0.5 && edgeAmt > 0.4 && h3 > 0.58) {
-    float along = fract(dot(local, tangent) * 2.4 + h);
-    float dash = step(0.35, along) * step(along, 0.68);
-    vec2 nrm = vec2(-tangent.y, tangent.x);
-    color += uWhite * orientedLine(local, nrm, mix(0.10, 0.16, edgeAmt), 0.008) * dash * intensity * 0.42 * edgeAmt;
+  if (useLine > 0.5 && edgeAmt > 0.5 && h3 > 0.72) {
+    float along = fract(dot(local, tangent) * 1.6 + h * 2.0);
+    float dash = step(0.22, along) * step(along, 0.78);
+    vec2 shift = tangent * mix(-0.12, 0.12, h2);
+    color += uWhite * orientedLine(local + shift, tangent, halfLen * 0.42, thick * 0.7) * dash * intensity * 0.28 * edgeAmt;
   }
 
   color += mix(uCyan, uWhite, 0.25) * markDot(local) * intensity * 0.72 * useDot;
