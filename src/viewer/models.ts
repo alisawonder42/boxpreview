@@ -212,17 +212,37 @@ export function createStandInBox(uniforms: MeltUniforms) {
   return group
 }
 
+export const DESK_COLOR = '#e7e3db'
+export const WALL_COLOR = '#d6d5d2'
+
 export function createGround() {
-  const geo = new THREE.PlaneGeometry(18, 18)
+  const geo = new THREE.PlaneGeometry(24, 24)
   geo.rotateX(-Math.PI / 2)
-  const mat = new THREE.MeshPhysicalMaterial({
-    color: '#f6f1e8',
-    roughness: 0.94,
+  const mat = new THREE.MeshStandardMaterial({
+    color: DESK_COLOR,
+    roughness: 0.96,
     metalness: 0,
   })
   const mesh = new THREE.Mesh(geo, mat)
+  mesh.name = 'desk'
+  mesh.castShadow = false
   mesh.receiveShadow = true
   mesh.position.y = FLOOR
+  return mesh
+}
+
+export function createWall() {
+  const geo = new THREE.PlaneGeometry(32, 18)
+  const mat = new THREE.MeshStandardMaterial({
+    color: WALL_COLOR,
+    roughness: 0.98,
+    metalness: 0,
+  })
+  const mesh = new THREE.Mesh(geo, mat)
+  mesh.name = 'wall'
+  mesh.castShadow = false
+  mesh.receiveShadow = false
+  mesh.position.set(0, 8.85, -10.5)
   return mesh
 }
 
