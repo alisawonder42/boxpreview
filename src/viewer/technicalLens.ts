@@ -10,21 +10,27 @@ export type LensParams = {
   backgroundDensity: number
   markBrightness: number
   vectorLength: number
-  glitch: number
   animSpeed: number
+  pulseAmount: number
+  scanSpeed: number
+  scanBoost: number
+  scanDensityBoost: number
 }
 
 export const DEFAULT_LENS: LensParams = {
   enabled: true,
   lensSize: 240,
-  cellSize: 12,
+  cellSize: 10,
   depthEdge: 1.8,
-  surfaceDensity: 0.12,
-  backgroundDensity: 0.03,
+  surfaceDensity: 0.32,
+  backgroundDensity: 0.04,
   markBrightness: 1.05,
   vectorLength: 0.36,
-  glitch: 0,
-  animSpeed: 0,
+  animSpeed: 0.8,
+  pulseAmount: 0.2,
+  scanSpeed: 0.25,
+  scanBoost: 0.35,
+  scanDensityBoost: 0.16,
 }
 
 const NORMAL_SCALE = 0.6
@@ -57,8 +63,11 @@ uniform float uSurfaceDensity;
 uniform float uBackgroundDensity;
 uniform float uMarkBrightness;
 uniform float uVectorLength;
-uniform float uGlitch;
 uniform float uAnimSpeed;
+uniform float uPulseAmount;
+uniform float uScanSpeed;
+uniform float uScanBoost;
+uniform float uScanDensityBoost;
 uniform float uCameraNear;
 uniform float uCameraFar;
 uniform vec3 uCyan;
@@ -156,7 +165,6 @@ vec3 technical(vec2 frag) {
 
   float h = hash21(cellId);
   float h2 = hash21(cellId + 19.17);
-  float h3 = hash21(cellId.yx + 4.2);
   float hOcc = hash21(cellId + 41.7);
   float hMark = hash21(cellId + 71.3);
 
@@ -176,45 +184,58 @@ vec3 technical(vec2 frag) {
   float edgeAmt = smoothstep(0.12, 0.55, disc * uDepthEdge);
   float nearBound = smoothstep(0.08, 0.4, discWide * uDepthEdge);
 
-  float occupancy = uBackgroundDensity;
-  occupancy = mix(occupancy, uSurfaceDensity, hasGeom * (1.0 - isSky));
-  occupancy = mix(occupancy, mix(0.2, 0.3, h3), hasGeom * (1.0 - isSky) * nearBound);
-  occupancy = mix(occupancy, mix(0.4, 0.55, h2), hasGeom * (1.0 - isSky) * edgeAmt);
-  occupancy = clamp(occupancy, 0.0, 0.55);
+  float onSurface = hasGeom * (1.0 - isSky);
+  float lensY = clamp((frag.y - (uPointer.y - uLensSize * 0.5)) / max(uLensSize, 1.0), 0.0, 1.0);
+  float scanPos = fract(uTime * uScanSpeed);
+  float scanWidth = 0.11;
+  float scan = 1.0 - smoothstep(0.0, scanWidth, abs(lensY - scanPos));
+  scan = max(scan, 1.0 - smoothstep(0.0, scanWidth, abs(lensY - scanPos + 1.0)));
+  scan = max(scan, 1.0 - smoothstep(0.0, scanWidth, abs(lensY - scanPos - 1.0)));
+
+  float occupancy = mix(uBackgroundDensity, uSurfaceDensity, onSurface);
+  occupancy = mix(occupancy, 0.42, onSurface * nearBound);
+  occupancy = mix(occupancy, mix(0.55, 0.70, h2), onSurface * edgeAmt);
+  occupancy += uScanDensityBoost * scan * onSurface;
+  occupancy = clamp(occupancy, 0.0, 0.70);
 
   if (hOcc > occupancy) return vec3(0.0);
+
+  float phase = h * 6.28318530718;
+  float pulse = 1.0 + uPulseAmount * sin(uTime * uAnimSpeed + phase);
+  float lengthPulse = 1.0 + 0.1 * sin(uTime * 0.8 + phase);
 
   vec2 dir = planeDir(n);
   float span = mix(0.28, 0.42, edgeAmt);
   span = mix(span, 0.52, edgeAmt * edgeAmt);
   span *= uVectorLength / 0.36;
-  span = clamp(span, 0.22, 0.55);
+  span *= lengthPulse * (1.0 + 0.13 * scan);
+  span = clamp(span, 0.22, 0.58);
   float halfLen = span * 0.5;
   float thick = mix(0.016, 0.022, edgeAmt);
 
   float useCross = step(0.95, hMark) * step(0.45, edgeAmt);
   float useDot = (1.0 - useCross) * step(hMark, 0.20);
   float useLine = 1.0 - useCross - useDot;
+  float flip = (1.0 - useCross) * step(0.97, hash21(cellId + vec2(floor(uTime * 0.28), 11.0)));
+  float lineAmt = mix(useLine, useDot, flip);
+  float dotAmt = mix(useDot, useLine, flip);
 
   vec3 ink = planeInk(n, edgeAmt, h);
-  float intensity = mix(0.72, 1.08, edgeAmt) * uMarkBrightness * mix(0.45, 1.0, hasGeom);
+  ink = mix(ink, uWhite, scan * edgeAmt * 0.5);
+  float intensity = mix(0.82, 1.08, edgeAmt) * uMarkBrightness * mix(0.7, 1.0, hasGeom);
+  intensity *= pulse * (1.0 + uScanBoost * scan);
 
   vec3 color = vec3(0.0);
-  color += ink * orientedLine(local, dir, halfLen, thick) * intensity * useLine;
+  color += ink * orientedLine(local, dir, halfLen, thick) * intensity * lineAmt;
 
-  if (useLine > 0.5 && edgeAmt > 0.55 && h2 > 0.84) {
+  if (lineAmt > 0.5 && edgeAmt > 0.55 && h2 > 0.84) {
     vec2 perp = vec2(-dir.y, dir.x);
     vec3 alt = ink.g > ink.r ? uRed : uCyan;
     color += alt * orientedLine(local + perp * 0.07, dir, halfLen * 0.72, thick * 0.85) * intensity * 0.55;
   }
 
-  color += ink * markDot(local) * intensity * 0.85 * useDot;
+  color += ink * markDot(local) * intensity * 0.85 * dotAmt;
   color += mix(ink, uWhite, 0.35) * markPlus(local, 0.11) * intensity * useCross;
-
-  if (uGlitch > 0.004 && uAnimSpeed > 0.01) {
-    float gPulse = step(0.996, hash21(cellId + vec2(floor(uTime * uAnimSpeed), 9.0)));
-    color *= 1.0 - gPulse * uGlitch * 0.35;
-  }
 
   return color;
 }
@@ -288,8 +309,11 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     uBackgroundDensity: { value: params.backgroundDensity },
     uMarkBrightness: { value: params.markBrightness },
     uVectorLength: { value: params.vectorLength },
-    uGlitch: { value: params.glitch },
     uAnimSpeed: { value: params.animSpeed },
+    uPulseAmount: { value: params.pulseAmount },
+    uScanSpeed: { value: params.scanSpeed },
+    uScanBoost: { value: params.scanBoost },
+    uScanDensityBoost: { value: params.scanDensityBoost },
     uCameraNear: { value: 0.1 },
     uCameraFar: { value: 48 },
     uCyan: { value: new THREE.Color('#36DDF5') },
@@ -358,8 +382,11 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     uniforms.uBackgroundDensity.value = params.backgroundDensity
     uniforms.uMarkBrightness.value = params.markBrightness
     uniforms.uVectorLength.value = params.vectorLength
-    uniforms.uGlitch.value = params.glitch
     uniforms.uAnimSpeed.value = params.animSpeed
+    uniforms.uPulseAmount.value = params.pulseAmount
+    uniforms.uScanSpeed.value = params.scanSpeed
+    uniforms.uScanBoost.value = params.scanBoost
+    uniforms.uScanDensityBoost.value = params.scanDensityBoost
     uniforms.tDepth.value = depthTexture
     uniforms.tNormal.value = normalTarget.texture
     if (camera instanceof THREE.PerspectiveCamera) {
