@@ -1,4 +1,5 @@
 import GUI from 'lil-gui'
+import { DEFAULT_LENS, type LensParams } from './technicalLens'
 
 export type LightLook = {
   exposure: number
@@ -31,6 +32,7 @@ export const DEFAULT_LIGHT: LightLook = {
 type DebugOptions = {
   look: LightLook
   onLook?: () => void
+  lens?: LensParams
 }
 
 export function attachDebugMenu(options: DebugOptions) {
@@ -38,7 +40,7 @@ export function attachDebugMenu(options: DebugOptions) {
   const embed = document.body.classList.contains('embed')
   if (embed && params.get('debug') !== '1') return null
 
-  const { look, onLook } = options
+  const { look, onLook, lens } = options
   const gui = new GUI({ title: 'Look' })
   gui.domElement.classList.add('debug-gui')
   gui.domElement.style.right = '12px'
@@ -66,6 +68,28 @@ export function attachDebugMenu(options: DebugOptions) {
     },
     'reset',
   ).name('Reset lights')
+
+  if (lens) {
+    const folder = gui.addFolder('Technical Lens')
+    folder.add(lens, 'enabled').name('enabled')
+    folder.add(lens, 'lensSize', 120, 500, 1).name('lens size')
+    folder.add(lens, 'cellSize', 4, 16, 0.5).name('cell size')
+    folder.add(lens, 'edgeStrength', 0, 3, 0.01).name('edge strength')
+    folder.add(lens, 'lumaInfluence', 0, 1.5, 0.01).name('luminance')
+    folder.add(lens, 'glyphBrightness', 0.2, 2, 0.01).name('glyph brightness')
+    folder.add(lens, 'glitch', 0, 0.15, 0.001).name('glitch amount')
+    folder.add(lens, 'animSpeed', 0, 2, 0.01).name('animation speed')
+    folder.add(
+      {
+        reset: () => {
+          Object.assign(lens, DEFAULT_LENS)
+          for (const controller of folder.controllers) controller.updateDisplay()
+        },
+      },
+      'reset',
+    ).name('Reset lens')
+    folder.open()
+  }
 
   return gui
 }
