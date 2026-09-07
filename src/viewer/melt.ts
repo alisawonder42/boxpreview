@@ -117,16 +117,16 @@ export function createMeltAnim(): MeltAnim {
     drainEnd: 1,
     fadeStart: 1,
     fadeEnd: 1,
-    spread: 1.12,
+    spread: 1.28,
     drainTravel: 0,
-    blobHeight: 0.48,
-    blobPlump: 1.35,
-    blobLobes: 0.34,
-    blobSpeed: 0.55,
-    blobRadius: 0.4,
-    blobFreq: 1.85,
-    blobGloss: 0.92,
-    blobClearcoat: 1,
+    blobHeight: 0.1,
+    blobPlump: 1.05,
+    blobLobes: 0.32,
+    blobSpeed: 0.48,
+    blobRadius: 0.78,
+    blobFreq: 1.55,
+    blobGloss: 0.82,
+    blobClearcoat: 0.7,
     puddleInStart: 0.1,
     puddleInEnd: 0.58,
     puddleOutStart: 0.6,
@@ -214,30 +214,35 @@ vec3 applyBlob(vec3 world) {
   float sag = smoothstep(0.0, max(0.001, uSagEnd), melt);
   float form = smoothstep(uFlattenStart, max(uFlattenStart + 0.001, uFlattenEnd), melt);
   float floorY = uBoundsMin.y;
+  float span = max(0.0001, uBoundsMax.y - uBoundsMin.y);
+  float height01 = saturate((world.y - floorY) / span);
 
   float n = snoise(vec3(world.x * uBlobFreq, uTime * uBlobSpeed, world.z * uBlobFreq));
-  float n2 = snoise(vec3(world.z * uBlobFreq * 1.65 + 6.0, uTime * uBlobSpeed * 0.52, world.x * uBlobFreq * 1.2));
-  float lobe = n * 0.68 + n2 * 0.32;
+  float n2 = snoise(vec3(world.z * uBlobFreq * 1.55 + 7.0, uTime * uBlobSpeed * 0.45, world.x * uBlobFreq));
+  float lobe = n * 0.7 + n2 * 0.3;
 
   vec3 slumped = world;
-  slumped.y = mix(world.y, floorY + 0.16 + n * 0.05, sag * 0.7);
+  slumped.y = mix(world.y, floorY + 0.03 + height01 * 0.07 + n * 0.02, sag);
 
-  vec3 c = vec3(uCenter.x, floorY + uBlobHeight * 0.48, uCenter.z);
-  vec3 rel = world - c;
-  float len = length(rel);
-  vec3 dir = len > 0.0001 ? rel / len : vec3(0.0, 1.0, 0.0);
+  vec2 center = uCenter.xz;
+  vec2 from = world.xz - center;
+  float fromLen = length(from);
+  vec2 nd = fromLen > 0.0001 ? from / fromLen : vec2(0.62, -0.28);
 
-  float fat = mix(0.42, 1.18, saturate(uBlobPlump * 0.55));
-  float rx = uBlobRadius * uSpread * (1.0 + lobe * uBlobLobes) * fat;
-  float rz = uBlobRadius * uSpread * (1.0 - lobe * uBlobLobes * 0.55) * fat;
-  float ry = uBlobHeight * mix(0.55, 1.15, saturate(uBlobPlump * 0.5));
+  float footprint = max(0.16, uBlobRadius * uSpread);
+  float u = saturate(fromLen / 0.62);
+  float mappedR = mix(fromLen, footprint * u * (0.88 + lobe * uBlobLobes * 0.35), form);
+  vec2 xz = center + nd * mappedR;
 
-  vec3 onSurf = c + dir * vec3(rx, ry, rz);
-  onSurf += vec3(n, abs(n2), n2) * (uBlobLobes * 0.08 * uBlobHeight);
-  onSurf.y = max(onSurf.y, floorY + 0.028);
-  onSurf.y += max(0.0, dir.y) * uBlobHeight * 0.16 * form;
+  float rn = length(xz - center) / footprint;
+  float dome = pow(max(0.0, 1.0 - rn * rn), max(0.45, uBlobPlump));
+  float thick = min(uBlobHeight, footprint * 0.28) * (1.0 + lobe * 0.16);
+  float y = floorY + 0.012 + thick * mix(0.18, 1.0, height01) * dome;
 
-  return mix(slumped, onSurf, form) + uTourOffset;
+  vec3 spill;
+  spill.xz = xz;
+  spill.y = y;
+  return mix(slumped, spill, form) + uTourOffset;
 }
 `
 

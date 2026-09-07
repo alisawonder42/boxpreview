@@ -23,13 +23,13 @@ export function attachDebugMenu(options: DebugOptions) {
     anim.progress = v
     anim.scrubbing = true
   })
-  gui.add(anim, 'blobHeight', 0.06, 0.7, 0.01).name('height').onChange(sync)
-  gui.add(anim, 'blobPlump', 0.25, 2.4, 0.01).name('plump').onChange(sync)
+  gui.add(anim, 'blobHeight', 0.03, 0.22, 0.005).name('thickness').onChange(sync)
+  gui.add(anim, 'blobPlump', 0.45, 2.2, 0.01).name('rounded').onChange(sync)
   gui.add(anim, 'blobLobes', 0, 0.95, 0.01).name('lobes').onChange(sync)
   gui.add(anim, 'blobSpeed', 0, 2.4, 0.01).name('wobble').onChange(sync)
-  gui.add(anim, 'blobRadius', 0.22, 1.2, 0.01).name('size').onChange(sync)
-  gui.add(anim, 'blobFreq', 0.6, 5, 0.01).name('lobe scale').onChange(sync)
-  gui.add(anim, 'spread', 0.7, 1.8, 0.01).name('spread').onChange(sync)
+  gui.add(anim, 'blobRadius', 0.35, 1.6, 0.01).name('spill size').onChange(sync)
+  gui.add(anim, 'blobFreq', 0.6, 4, 0.01).name('lobe scale').onChange(sync)
+  gui.add(anim, 'spread', 0.8, 2.0, 0.01).name('spread').onChange(sync)
   gui.add(anim, 'blobGloss', 0, 1, 0.01).name('gloss')
   gui.add(anim, 'blobClearcoat', 0, 1, 0.01).name('clearcoat')
   gui.add({ play: () => onPlay?.() }, 'play').name('Play melt')
