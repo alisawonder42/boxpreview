@@ -12,9 +12,13 @@ export type LensParams = {
   vectorLength: number
   animSpeed: number
   pulseAmount: number
+  glyphSpeed: number
   scanSpeed: number
   scanBoost: number
   scanDensityBoost: number
+  cyan: string
+  red: string
+  white: string
 }
 
 export const DEFAULT_LENS: LensParams = {
@@ -28,16 +32,19 @@ export const DEFAULT_LENS: LensParams = {
   vectorLength: 0.36,
   animSpeed: 0.8,
   pulseAmount: 0.2,
+  glyphSpeed: 0.75,
   scanSpeed: 0.25,
   scanBoost: 0.35,
   scanDensityBoost: 0.16,
+  cyan: '#36DDF5',
+  red: '#FF3B61',
+  white: '#DCEEFF',
 }
 
 const NORMAL_SCALE = 0.6
 
 const VERTEX = /* glsl */ `
 varying vec2 vUv;
-
 void main() {
   vUv = uv;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
@@ -47,7 +54,6 @@ void main() {
 const FRAGMENT = /* glsl */ `
 #include <common>
 #include <packing>
-
 uniform sampler2D tScene;
 uniform sampler2D tDepth;
 uniform sampler2D tNormal;
@@ -65,6 +71,7 @@ uniform float uMarkBrightness;
 uniform float uVectorLength;
 uniform float uAnimSpeed;
 uniform float uPulseAmount;
+uniform float uGlyphSpeed;
 uniform float uScanSpeed;
 uniform float uScanBoost;
 uniform float uScanDensityBoost;
@@ -73,7 +80,6 @@ uniform float uCameraFar;
 uniform vec3 uCyan;
 uniform vec3 uRed;
 uniform vec3 uWhite;
-
 varying vec2 vUv;
 
 float hash21(vec2 p) {
@@ -81,46 +87,56 @@ float hash21(vec2 p) {
   p += dot(p, p + 45.32);
   return fract(p.x * p.y);
 }
-
 float sdSegment(vec2 p, vec2 a, vec2 b) {
   vec2 pa = p - a;
   vec2 ba = b - a;
   float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-5), 0.0, 1.0);
   return length(pa - ba * h);
 }
-
 float stroke(float d, float width) {
   float aa = max(fwidth(d), 0.0015);
   return 1.0 - smoothstep(width, width + aa, d);
 }
-
 float orientedLine(vec2 p, vec2 dir, float halfLen, float thick) {
   vec2 n = dir * inversesqrt(max(dot(dir, dir), 1e-8));
   return stroke(sdSegment(p, -n * halfLen, n * halfLen), thick);
 }
-
-float markDot(vec2 p) {
-  return stroke(length(p) - 0.016, 0.02);
+float markVertical(vec2 p, float s, float thick) {
+  return stroke(sdSegment(p, vec2(0.0, -s), vec2(0.0, s)), thick);
 }
-
-float markPlus(vec2 p, float s) {
-  float a = stroke(sdSegment(p, vec2(-s, 0.0), vec2(s, 0.0)), 0.016);
-  float b = stroke(sdSegment(p, vec2(0.0, -s), vec2(0.0, s)), 0.016);
-  return max(a, b);
+float markSlash(vec2 p, float s, float thick) {
+  return stroke(sdSegment(p, vec2(-s * 0.72, -s), vec2(s * 0.72, s)), thick);
 }
-
+float markLeftBracket(vec2 p, float s, float thick) {
+  float x = -s * 0.48;
+  float top = stroke(sdSegment(p, vec2(x, s), vec2(s * 0.35, s)), thick);
+  float side = stroke(sdSegment(p, vec2(x, -s), vec2(x, s)), thick);
+  float bottom = stroke(sdSegment(p, vec2(x, -s), vec2(s * 0.35, -s)), thick);
+  return max(side, max(top, bottom));
+}
+float markRightBracket(vec2 p, float s, float thick) {
+  float x = s * 0.48;
+  float top = stroke(sdSegment(p, vec2(-s * 0.35, s), vec2(x, s)), thick);
+  float side = stroke(sdSegment(p, vec2(x, -s), vec2(x, s)), thick);
+  float bottom = stroke(sdSegment(p, vec2(-s * 0.35, -s), vec2(x, -s)), thick);
+  return max(side, max(top, bottom));
+}
+float markGlyph(vec2 p, float glyph, float s, float thick) {
+  if (glyph < 0.5) return markVertical(p, s, thick);
+  if (glyph < 1.5) return markLeftBracket(p, s, thick);
+  if (glyph < 2.5) return markRightBracket(p, s, thick);
+  return markSlash(p, s, thick);
+}
 float readEyeDepth(vec2 uv) {
   vec2 t = clamp(uv, vec2(0.001), vec2(0.999));
   float d = texture2D(tDepth, t).x;
   float viewZ = perspectiveDepthToViewZ(d, uCameraNear, uCameraFar);
   return -viewZ;
 }
-
 vec3 decodeNormal(vec2 uv) {
   vec3 packed = texture2D(tNormal, clamp(uv, vec2(0.001), vec2(0.999))).rgb;
   return packed * 2.0 - 1.0;
 }
-
 vec3 sampleNormal(vec2 uv, float px) {
   vec2 e = vec2(px, 0.0) / uResolution;
   vec3 n = decodeNormal(uv);
@@ -131,7 +147,6 @@ vec3 sampleNormal(vec2 uv, float px) {
   float len = length(n);
   return len > 1e-4 ? n / len : vec3(0.0);
 }
-
 float depthDiscontinuity(vec2 uv, float distPx) {
   vec2 span = vec2(distPx) / uResolution;
   float c = readEyeDepth(uv);
@@ -141,7 +156,6 @@ float depthDiscontinuity(vec2 uv, float distPx) {
   float u = abs(readEyeDepth(uv + vec2(0.0, span.y)) - c);
   return max(max(l, r), max(d, u)) / max(c, 0.15);
 }
-
 vec2 planeDir(vec3 n) {
   vec3 a = abs(n);
   if (a.y >= a.x && a.y >= a.z * 0.82) return vec2(1.0, 0.0);
@@ -150,40 +164,33 @@ vec2 planeDir(vec3 n) {
   }
   return vec2(0.7071, 0.7071);
 }
-
 vec3 planeInk(vec3 n, float edgeAmt, float h) {
   vec3 a = abs(n);
   vec3 ink = a.x > a.y ? uRed : uCyan;
   if (edgeAmt > 0.62 && h > 0.9) ink = uWhite;
   return ink;
 }
-
 vec3 technical(vec2 frag) {
   float cell = max(uCellSize, 8.0);
   vec2 cellId = floor(frag / cell);
   vec2 origin = cellId * cell;
-
   float h = hash21(cellId);
   float h2 = hash21(cellId + 19.17);
   float hOcc = hash21(cellId + 41.7);
   float hMark = hash21(cellId + 71.3);
-
   vec2 jitter = (vec2(h, h2) - 0.5) * 0.44;
   vec2 local = (frag - origin) / cell - 0.5 - jitter * 0.5;
   vec2 center = origin + cell * (0.5 + jitter * 0.5);
   vec2 uv = clamp(center / uResolution, vec2(0.002), vec2(0.998));
-
   vec3 n = sampleNormal(uv, cell * 0.45);
   float nLen = length(decodeNormal(uv));
   float hasGeom = step(0.28, nLen);
-
   float eyeDepth = readEyeDepth(uv);
   float isSky = max(step(uCameraFar * 0.78, eyeDepth), 1.0 - hasGeom);
   float disc = depthDiscontinuity(uv, cell * 1.6);
   float discWide = depthDiscontinuity(uv, cell * 3.4);
   float edgeAmt = smoothstep(0.12, 0.55, disc * uDepthEdge);
   float nearBound = smoothstep(0.08, 0.4, discWide * uDepthEdge);
-
   float onSurface = hasGeom * (1.0 - isSky);
   float lensY = clamp((frag.y - (uPointer.y - uLensSize * 0.5)) / max(uLensSize, 1.0), 0.0, 1.0);
   float scanPos = fract(uTime * uScanSpeed);
@@ -191,55 +198,39 @@ vec3 technical(vec2 frag) {
   float scan = 1.0 - smoothstep(0.0, scanWidth, abs(lensY - scanPos));
   scan = max(scan, 1.0 - smoothstep(0.0, scanWidth, abs(lensY - scanPos + 1.0)));
   scan = max(scan, 1.0 - smoothstep(0.0, scanWidth, abs(lensY - scanPos - 1.0)));
-
   float occupancy = mix(uBackgroundDensity, uSurfaceDensity, onSurface);
   occupancy = mix(occupancy, 0.42, onSurface * nearBound);
   occupancy = mix(occupancy, mix(0.55, 0.70, h2), onSurface * edgeAmt);
   occupancy += uScanDensityBoost * scan * onSurface;
   occupancy = clamp(occupancy, 0.0, 0.70);
-
   if (hOcc > occupancy) return vec3(0.0);
-
   float phase = h * 6.28318530718;
   float pulse = 1.0 + uPulseAmount * sin(uTime * uAnimSpeed + phase);
-  float lengthPulse = 1.0 + 0.1 * sin(uTime * 0.8 + phase);
-
-  vec2 dir = planeDir(n);
+  float lengthPulse = 1.0 + 0.08 * sin(uTime * 0.8 + phase);
   float span = mix(0.28, 0.42, edgeAmt);
   span = mix(span, 0.52, edgeAmt * edgeAmt);
   span *= uVectorLength / 0.36;
-  span *= lengthPulse * (1.0 + 0.13 * scan);
+  span *= lengthPulse * (1.0 + 0.10 * scan);
   span = clamp(span, 0.22, 0.58);
-  float halfLen = span * 0.5;
+  float glyphFrame = floor(uTime * uGlyphSpeed + h * 2.7 + h2 * 1.9);
+  float glyph = mod(floor(hMark * 4.0) + glyphFrame, 4.0);
+  float glyphSize = span * 0.46;
   float thick = mix(0.016, 0.022, edgeAmt);
-
-  float useCross = step(0.95, hMark) * step(0.45, edgeAmt);
-  float useDot = (1.0 - useCross) * step(hMark, 0.20);
-  float useLine = 1.0 - useCross - useDot;
-  float flip = (1.0 - useCross) * step(0.97, hash21(cellId + vec2(floor(uTime * 0.28), 11.0)));
-  float lineAmt = mix(useLine, useDot, flip);
-  float dotAmt = mix(useDot, useLine, flip);
-
   vec3 ink = planeInk(n, edgeAmt, h);
   ink = mix(ink, uWhite, scan * edgeAmt * 0.5);
   float intensity = mix(0.82, 1.08, edgeAmt) * uMarkBrightness * mix(0.7, 1.0, hasGeom);
   intensity *= pulse * (1.0 + uScanBoost * scan);
-
   vec3 color = vec3(0.0);
-  color += ink * orientedLine(local, dir, halfLen, thick) * intensity * lineAmt;
-
-  if (lineAmt > 0.5 && edgeAmt > 0.55 && h2 > 0.84) {
+  color += ink * markGlyph(local, glyph, glyphSize, thick) * intensity;
+  float guide = step(0.92, h2) * edgeAmt;
+  if (guide > 0.0) {
+    vec2 dir = planeDir(n);
     vec2 perp = vec2(-dir.y, dir.x);
     vec3 alt = ink.g > ink.r ? uRed : uCyan;
-    color += alt * orientedLine(local + perp * 0.07, dir, halfLen * 0.72, thick * 0.85) * intensity * 0.55;
+    color += alt * orientedLine(local + perp * 0.08, dir, span * 0.32, thick * 0.75) * intensity * guide * 0.5;
   }
-
-  color += ink * markDot(local) * intensity * 0.85 * dotAmt;
-  color += mix(ink, uWhite, 0.35) * markPlus(local, 0.11) * intensity * useCross;
-
   return color;
 }
-
 void main() {
   vec3 sceneColor = texture2D(tScene, vUv).rgb;
   vec2 delta = abs(gl_FragCoord.xy - uPointer);
@@ -255,13 +246,11 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
   const params: LensParams = { ...DEFAULT_LENS }
   const size = new THREE.Vector2()
   renderer.getDrawingBufferSize(size)
-
   const depthTexture = new THREE.DepthTexture(size.x, size.y, THREE.UnsignedIntType)
   depthTexture.format = THREE.DepthFormat
   depthTexture.minFilter = THREE.NearestFilter
   depthTexture.magFilter = THREE.NearestFilter
   depthTexture.generateMipmaps = false
-
   const target = new THREE.WebGLRenderTarget(size.x, size.y, {
     minFilter: THREE.LinearFilter,
     magFilter: THREE.LinearFilter,
@@ -274,11 +263,7 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
   })
   target.texture.name = 'TechnicalLens.scene'
   target.depthTexture = depthTexture
-
-  const normalSize = new THREE.Vector2(
-    Math.max(1, Math.floor(size.x * NORMAL_SCALE)),
-    Math.max(1, Math.floor(size.y * NORMAL_SCALE)),
-  )
+  const normalSize = new THREE.Vector2(Math.max(1, Math.floor(size.x * NORMAL_SCALE)), Math.max(1, Math.floor(size.y * NORMAL_SCALE)))
   const normalTarget = new THREE.WebGLRenderTarget(normalSize.x, normalSize.y, {
     minFilter: THREE.NearestFilter,
     magFilter: THREE.NearestFilter,
@@ -289,52 +274,24 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     samples: 0,
   })
   normalTarget.texture.name = 'TechnicalLens.normal'
-
   const normalMaterial = new THREE.MeshNormalMaterial()
   const normalClear = new THREE.Color(0.5, 0.5, 0.5)
-
   const uniforms = {
-    tScene: { value: target.texture },
-    tDepth: { value: depthTexture },
-    tNormal: { value: normalTarget.texture },
-    uResolution: { value: size.clone() },
-    uPointer: { value: new THREE.Vector2(-1e6, -1e6) },
-    uLensSize: { value: params.lensSize },
-    uCellSize: { value: params.cellSize },
-    uActive: { value: 0 },
-    uEnabled: { value: params.enabled ? 1 : 0 },
-    uTime: { value: 0 },
-    uDepthEdge: { value: params.depthEdge },
-    uSurfaceDensity: { value: params.surfaceDensity },
-    uBackgroundDensity: { value: params.backgroundDensity },
-    uMarkBrightness: { value: params.markBrightness },
-    uVectorLength: { value: params.vectorLength },
-    uAnimSpeed: { value: params.animSpeed },
-    uPulseAmount: { value: params.pulseAmount },
-    uScanSpeed: { value: params.scanSpeed },
-    uScanBoost: { value: params.scanBoost },
-    uScanDensityBoost: { value: params.scanDensityBoost },
-    uCameraNear: { value: 0.1 },
-    uCameraFar: { value: 48 },
-    uCyan: { value: new THREE.Color('#36DDF5') },
-    uRed: { value: new THREE.Color('#FF3B61') },
-    uWhite: { value: new THREE.Color('#DCEEFF') },
+    tScene: { value: target.texture }, tDepth: { value: depthTexture }, tNormal: { value: normalTarget.texture },
+    uResolution: { value: size.clone() }, uPointer: { value: new THREE.Vector2(-1e6, -1e6) },
+    uLensSize: { value: params.lensSize }, uCellSize: { value: params.cellSize }, uActive: { value: 0 },
+    uEnabled: { value: params.enabled ? 1 : 0 }, uTime: { value: 0 }, uDepthEdge: { value: params.depthEdge },
+    uSurfaceDensity: { value: params.surfaceDensity }, uBackgroundDensity: { value: params.backgroundDensity },
+    uMarkBrightness: { value: params.markBrightness }, uVectorLength: { value: params.vectorLength },
+    uAnimSpeed: { value: params.animSpeed }, uPulseAmount: { value: params.pulseAmount }, uGlyphSpeed: { value: params.glyphSpeed },
+    uScanSpeed: { value: params.scanSpeed }, uScanBoost: { value: params.scanBoost }, uScanDensityBoost: { value: params.scanDensityBoost },
+    uCameraNear: { value: 0.1 }, uCameraFar: { value: 48 },
+    uCyan: { value: new THREE.Color(params.cyan) }, uRed: { value: new THREE.Color(params.red) }, uWhite: { value: new THREE.Color(params.white) },
   }
-
-  const material = new THREE.ShaderMaterial({
-    name: 'TechnicalLens',
-    uniforms,
-    vertexShader: VERTEX,
-    fragmentShader: FRAGMENT,
-    depthTest: false,
-    depthWrite: false,
-    toneMapped: true,
-  })
-
+  const material = new THREE.ShaderMaterial({ name: 'TechnicalLens', uniforms, vertexShader: VERTEX, fragmentShader: FRAGMENT, depthTest: false, depthWrite: false, toneMapped: true })
   const quad = new FullScreenQuad(material)
   const pointerCss = new THREE.Vector2(-1, -1)
   let pointerActive = false
-
   const syncSizeUniforms = () => {
     renderer.getDrawingBufferSize(size)
     uniforms.uResolution.value.copy(size)
@@ -347,7 +304,6 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     uniforms.uCellSize.value = params.cellSize * sx
     uniforms.uPointer.value.set(pointerCss.x * sx, (cssH - pointerCss.y) * sy)
   }
-
   const resize = () => {
     renderer.getDrawingBufferSize(size)
     const w = Math.max(1, Math.floor(size.x))
@@ -360,19 +316,16 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     uniforms.tNormal.value = normalTarget.texture
     syncSizeUniforms()
   }
-
   const setPointer = (clientX: number, clientY: number) => {
     const canvas = renderer.domElement
     const rect = canvas.getBoundingClientRect()
     pointerCss.set(clientX - rect.left, clientY - rect.top)
     syncSizeUniforms()
   }
-
   const setPointerActive = (active: boolean) => {
     pointerActive = active
     uniforms.uActive.value = active && params.enabled ? 1 : 0
   }
-
   const render = (scene: THREE.Scene, camera: THREE.Camera, time: number) => {
     uniforms.uTime.value = time
     uniforms.uEnabled.value = params.enabled ? 1 : 0
@@ -384,9 +337,13 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     uniforms.uVectorLength.value = params.vectorLength
     uniforms.uAnimSpeed.value = params.animSpeed
     uniforms.uPulseAmount.value = params.pulseAmount
+    uniforms.uGlyphSpeed.value = params.glyphSpeed
     uniforms.uScanSpeed.value = params.scanSpeed
     uniforms.uScanBoost.value = params.scanBoost
     uniforms.uScanDensityBoost.value = params.scanDensityBoost
+    uniforms.uCyan.value.set(params.cyan)
+    uniforms.uRed.value.set(params.red)
+    uniforms.uWhite.value.set(params.white)
     uniforms.tDepth.value = depthTexture
     uniforms.tNormal.value = normalTarget.texture
     if (camera instanceof THREE.PerspectiveCamera) {
@@ -394,14 +351,11 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
       uniforms.uCameraFar.value = camera.far
     }
     syncSizeUniforms()
-
     const prevShadow = renderer.shadowMap.enabled
     const prevBackground = scene.background
     const prevOverride = scene.overrideMaterial
-
     renderer.setRenderTarget(target)
     renderer.render(scene, camera)
-
     if (pointerActive && params.enabled) {
       renderer.shadowMap.enabled = false
       scene.background = normalClear
@@ -412,11 +366,9 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
       scene.background = prevBackground
       renderer.shadowMap.enabled = prevShadow
     }
-
     renderer.setRenderTarget(null)
     quad.render(renderer)
   }
-
   const dispose = () => {
     target.dispose()
     depthTexture.dispose()
@@ -425,17 +377,6 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     material.dispose()
     quad.dispose()
   }
-
   resize()
-
-  return {
-    params,
-    render,
-    setPointer,
-    setPointerActive,
-    resize,
-    dispose,
-  }
+  return { params, render, setPointer, setPointerActive, resize, dispose }
 }
-
-export type TechnicalLens = ReturnType<typeof createTechnicalLens>
