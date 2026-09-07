@@ -17,6 +17,7 @@ import {
   findBundledScan,
   firstAlbedo,
   fitDesk,
+  fitWall,
   loadScanFromUrl,
   prepareLoadedScan,
   FLOOR,
@@ -99,11 +100,14 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     )
     direct.shadow.radius = look.softness
     const deskMat = ground.material as THREE.MeshStandardMaterial
-    const wallMat = wall.material as THREE.MeshStandardMaterial
+    const wallMat = wall.material as THREE.MeshBasicMaterial
     deskMat.color.set(look.floor)
     wallMat.color.set(look.wall)
     scene.background = new THREE.Color(look.wall)
-    if (subject) fitDesk(ground, subject, look.deskSize)
+    if (subject) {
+      fitDesk(ground, subject, look.deskSize)
+      fitWall(wall, ground)
+    }
   }
   applyLook()
 
@@ -118,6 +122,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   carrier.add(subject)
   bindMeltBounds(subject, uniforms)
   fitDesk(ground, subject, look.deskSize)
+  fitWall(wall, ground)
   const restCenter = uniforms.uCenter.value.clone()
   const restMin = uniforms.uBoundsMin.value.clone()
   const restMax = uniforms.uBoundsMax.value.clone()
@@ -145,6 +150,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     bindMeltBounds(subject, uniforms)
     captureRest()
     fitDesk(ground, subject, look.deskSize)
+    fitWall(wall, ground)
     const map = firstAlbedo(subject)
     if (puddle.parent) puddle.parent.remove(puddle)
     puddle = createPuddle(map)
