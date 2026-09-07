@@ -15,6 +15,11 @@ export type LensParams = {
   scanSpeed: number
   scanBoost: number
   scanDensityBoost: number
+  charSpeed: number
+  colorSpeed: number
+  colorA: string
+  colorB: string
+  colorC: string
 }
 
 export const DEFAULT_LENS: LensParams = {
@@ -31,6 +36,11 @@ export const DEFAULT_LENS: LensParams = {
   scanSpeed: 0.25,
   scanBoost: 0.35,
   scanDensityBoost: 0.16,
+  charSpeed: 2.4,
+  colorSpeed: 1.6,
+  colorA: '#36DDF5',
+  colorB: '#FF3B61',
+  colorC: '#DCEEFF',
 }
 
 const NORMAL_SCALE = 0.6
@@ -68,11 +78,13 @@ uniform float uPulseAmount;
 uniform float uScanSpeed;
 uniform float uScanBoost;
 uniform float uScanDensityBoost;
+uniform float uCharSpeed;
+uniform float uColorSpeed;
 uniform float uCameraNear;
 uniform float uCameraFar;
-uniform vec3 uCyan;
-uniform vec3 uRed;
-uniform vec3 uWhite;
+uniform vec3 uColorA;
+uniform vec3 uColorB;
+uniform vec3 uColorC;
 
 varying vec2 vUv;
 
@@ -99,14 +111,46 @@ float orientedLine(vec2 p, vec2 dir, float halfLen, float thick) {
   return stroke(sdSegment(p, -n * halfLen, n * halfLen), thick);
 }
 
-float markDot(vec2 p) {
-  return stroke(length(p) - 0.016, 0.02);
+float markBar(vec2 p, float halfLen, float thick) {
+  return orientedLine(p, vec2(0.0, 1.0), halfLen, thick);
 }
 
-float markPlus(vec2 p, float s) {
-  float a = stroke(sdSegment(p, vec2(-s, 0.0), vec2(s, 0.0)), 0.016);
-  float b = stroke(sdSegment(p, vec2(0.0, -s), vec2(0.0, s)), 0.016);
+float markColon(vec2 p, float s, float thick) {
+  float a = stroke(length(p - vec2(0.0, s)) - 0.02, thick);
+  float b = stroke(length(p + vec2(0.0, s)) - 0.02, thick);
   return max(a, b);
+}
+
+float markBracketL(vec2 p, float halfLen, float thick) {
+  float v = stroke(sdSegment(p, vec2(-0.08, -halfLen), vec2(-0.08, halfLen)), thick);
+  float t = stroke(sdSegment(p, vec2(-0.08, halfLen), vec2(0.1, halfLen)), thick);
+  float b = stroke(sdSegment(p, vec2(-0.08, -halfLen), vec2(0.1, -halfLen)), thick);
+  return max(v, max(t, b));
+}
+
+float markBracketR(vec2 p, float halfLen, float thick) {
+  float v = stroke(sdSegment(p, vec2(0.08, -halfLen), vec2(0.08, halfLen)), thick);
+  float t = stroke(sdSegment(p, vec2(-0.1, halfLen), vec2(0.08, halfLen)), thick);
+  float b = stroke(sdSegment(p, vec2(-0.1, -halfLen), vec2(0.08, -halfLen)), thick);
+  return max(v, max(t, b));
+}
+
+float markSlash(vec2 p, float halfLen, float thick) {
+  return orientedLine(p, vec2(0.7071, 0.7071), halfLen, thick);
+}
+
+float drawGlyph(float glyph, vec2 local, float halfLen, float thick) {
+  float colon = markColon(local, max(halfLen * 0.55, 0.06), thick);
+  float bar = markBar(local, halfLen, thick);
+  float brL = markBracketL(local, halfLen, thick);
+  float brR = markBracketR(local, halfLen, thick);
+  float slash = markSlash(local, halfLen, thick);
+  float m = bar * step(glyph, 0.5);
+  m = max(m, colon * step(0.5, glyph) * step(glyph, 1.5));
+  m = max(m, brL * step(1.5, glyph) * step(glyph, 2.5));
+  m = max(m, brR * step(2.5, glyph) * step(glyph, 3.5));
+  m = max(m, slash * step(3.5, glyph));
+  return m;
 }
 
 float readEyeDepth(vec2 uv) {
@@ -142,19 +186,10 @@ float depthDiscontinuity(vec2 uv, float distPx) {
   return max(max(l, r), max(d, u)) / max(c, 0.15);
 }
 
-vec2 planeDir(vec3 n) {
-  vec3 a = abs(n);
-  if (a.y >= a.x && a.y >= a.z * 0.82) return vec2(1.0, 0.0);
-  if (a.x >= a.y && a.x >= a.z * 0.82) {
-    return n.x >= 0.0 ? vec2(0.0, 1.0) : vec2(-0.7071, 0.7071);
-  }
-  return vec2(0.7071, 0.7071);
-}
-
 vec3 planeInk(vec3 n, float edgeAmt, float h) {
   vec3 a = abs(n);
-  vec3 ink = a.x > a.y ? uRed : uCyan;
-  if (edgeAmt > 0.62 && h > 0.9) ink = uWhite;
+  vec3 ink = a.x > a.y ? uColorB : uColorA;
+  if (edgeAmt > 0.62 && h > 0.9) ink = uColorC;
   return ink;
 }
 
@@ -204,7 +239,6 @@ vec3 technical(vec2 frag) {
   float pulse = 1.0 + uPulseAmount * sin(uTime * uAnimSpeed + phase);
   float lengthPulse = 1.0 + 0.1 * sin(uTime * 0.8 + phase);
 
-  vec2 dir = planeDir(n);
   float span = mix(0.28, 0.42, edgeAmt);
   span = mix(span, 0.52, edgeAmt * edgeAmt);
   span *= uVectorLength / 0.36;
@@ -213,31 +247,21 @@ vec3 technical(vec2 frag) {
   float halfLen = span * 0.5;
   float thick = mix(0.016, 0.022, edgeAmt);
 
-  float useCross = step(0.95, hMark) * step(0.45, edgeAmt);
-  float useDot = (1.0 - useCross) * step(hMark, 0.20);
-  float useLine = 1.0 - useCross - useDot;
-  float flip = (1.0 - useCross) * step(0.97, hash21(cellId + vec2(floor(uTime * 0.28), 11.0)));
-  float lineAmt = mix(useLine, useDot, flip);
-  float dotAmt = mix(useDot, useLine, flip);
+  float charEpoch = floor(uTime * uCharSpeed + h * 5.0);
+  float glyph = floor(hash21(cellId + vec2(charEpoch, 5.4)) * 5.0);
+  glyph = mix(floor(hMark * 5.0), glyph, step(0.01, uCharSpeed));
 
-  vec3 ink = planeInk(n, edgeAmt, h);
-  ink = mix(ink, uWhite, scan * edgeAmt * 0.5);
+  float colorEpoch = floor(uTime * uColorSpeed + h2 * 3.0);
+  float cPick = hash21(cellId + vec2(colorEpoch, 8.1));
+  vec3 liveA = mix(uColorA, uColorB, step(0.5, cPick));
+  liveA = mix(liveA, uColorC, step(0.88, cPick));
+  vec3 ink = mix(planeInk(n, edgeAmt, h), liveA, step(0.01, uColorSpeed));
+  ink = mix(ink, uColorC, scan * edgeAmt * 0.45);
+
   float intensity = mix(0.82, 1.08, edgeAmt) * uMarkBrightness * mix(0.7, 1.0, hasGeom);
   intensity *= pulse * (1.0 + uScanBoost * scan);
 
-  vec3 color = vec3(0.0);
-  color += ink * orientedLine(local, dir, halfLen, thick) * intensity * lineAmt;
-
-  if (lineAmt > 0.5 && edgeAmt > 0.55 && h2 > 0.84) {
-    vec2 perp = vec2(-dir.y, dir.x);
-    vec3 alt = ink.g > ink.r ? uRed : uCyan;
-    color += alt * orientedLine(local + perp * 0.07, dir, halfLen * 0.72, thick * 0.85) * intensity * 0.55;
-  }
-
-  color += ink * markDot(local) * intensity * 0.85 * dotAmt;
-  color += mix(ink, uWhite, 0.35) * markPlus(local, 0.11) * intensity * useCross;
-
-  return color;
+  return ink * drawGlyph(glyph, local, halfLen, thick) * intensity;
 }
 
 void main() {
@@ -314,11 +338,13 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     uScanSpeed: { value: params.scanSpeed },
     uScanBoost: { value: params.scanBoost },
     uScanDensityBoost: { value: params.scanDensityBoost },
+    uCharSpeed: { value: params.charSpeed },
+    uColorSpeed: { value: params.colorSpeed },
     uCameraNear: { value: 0.1 },
     uCameraFar: { value: 48 },
-    uCyan: { value: new THREE.Color('#36DDF5') },
-    uRed: { value: new THREE.Color('#FF3B61') },
-    uWhite: { value: new THREE.Color('#DCEEFF') },
+    uColorA: { value: new THREE.Color(params.colorA) },
+    uColorB: { value: new THREE.Color(params.colorB) },
+    uColorC: { value: new THREE.Color(params.colorC) },
   }
 
   const material = new THREE.ShaderMaterial({
@@ -387,6 +413,11 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     uniforms.uScanSpeed.value = params.scanSpeed
     uniforms.uScanBoost.value = params.scanBoost
     uniforms.uScanDensityBoost.value = params.scanDensityBoost
+    uniforms.uCharSpeed.value = params.charSpeed
+    uniforms.uColorSpeed.value = params.colorSpeed
+    uniforms.uColorA.value.set(params.colorA)
+    uniforms.uColorB.value.set(params.colorB)
+    uniforms.uColorC.value.set(params.colorC)
     uniforms.tDepth.value = depthTexture
     uniforms.tNormal.value = normalTarget.texture
     if (camera instanceof THREE.PerspectiveCamera) {
