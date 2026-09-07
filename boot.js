@@ -1,7 +1,6 @@
 /* GitHub still Jekyll-deploys the repo root after the Vite Pages job.
    That leftover page points at /src/main.ts, which never runs, so the
-   footer stays on "Looking for a scan…" even though BoxModel.fbx is
-   already at the site root. Boot the last committed bundle instead. */
+   footer stays on "Looking for a scan…". Boot the last committed bundle instead. */
 ;(function () {
   function already() {
     return Boolean(window.__BOXPREVIEW_BOOTED)
