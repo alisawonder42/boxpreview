@@ -16,12 +16,12 @@ import {
   createWall,
   findBundledScan,
   firstAlbedo,
+  fitDesk,
   loadScanFromUrl,
   prepareLoadedScan,
   FLOOR,
-  WALL_COLOR,
 } from './models'
-import { attachDebugMenu } from './debug'
+import { attachDebugMenu, DEFAULT_LIGHT, type LightLook } from './debug'
 import { createIntro, INTRO_HOME, shouldSkipIntro } from './intro'
 import { beginTour, createTour, isTouring, resetTour, SPLASH_HOLD, tickTour } from './tour'
 
@@ -44,7 +44,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   renderer.setSize(window.innerWidth, window.innerHeight)
   renderer.outputColorSpace = THREE.SRGBColorSpace
   renderer.toneMapping = THREE.ACESFilmicToneMapping
-  renderer.toneMappingExposure = 1.06
+  renderer.toneMappingExposure = DEFAULT_LIGHT.exposure
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = THREE.PCFSoftShadowMap
 
@@ -52,29 +52,28 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
   pmrem.dispose()
 
+  const look: LightLook = { ...DEFAULT_LIGHT }
+
   const scene = new THREE.Scene()
-  scene.background = new THREE.Color(WALL_COLOR)
-  scene.fog = new THREE.Fog(WALL_COLOR, 16, 32)
+  scene.background = new THREE.Color(look.wall)
   scene.environment = env
-  scene.environmentIntensity = 0.9
+  scene.environmentIntensity = look.env
 
   const camera = new THREE.PerspectiveCamera(32, window.innerWidth / window.innerHeight, 0.1, 48)
   camera.position.copy(INTRO_HOME.position)
 
-  const hemi = new THREE.HemisphereLight('#e4e2de', '#ddd9d1', 0.58)
+  const hemi = new THREE.HemisphereLight('#e8e4dc', '#d8d2c8', look.hemi)
   scene.add(hemi)
 
-  const direct = new THREE.DirectionalLight('#fff6ea', 0.9)
-  direct.position.set(-3.2, 3.8, 2.4)
+  const direct = new THREE.DirectionalLight('#fff4ea', look.key)
   direct.castShadow = true
   direct.shadow.mapSize.set(1024, 1024)
   direct.shadow.camera.near = 1
   direct.shadow.camera.far = 14
-  direct.shadow.camera.left = -2.6
-  direct.shadow.camera.right = 2.6
-  direct.shadow.camera.top = 2.6
-  direct.shadow.camera.bottom = -2.6
-  direct.shadow.radius = 6
+  direct.shadow.camera.left = -3.2
+  direct.shadow.camera.right = 3.2
+  direct.shadow.camera.top = 3.2
+  direct.shadow.camera.bottom = -3.2
   direct.shadow.bias = -0.0002
   scene.add(direct)
 
@@ -82,6 +81,28 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   scene.add(ground)
   const wall = createWall()
   scene.add(wall)
+
+  const applyLook = () => {
+    renderer.toneMappingExposure = look.exposure
+    hemi.intensity = look.hemi
+    direct.intensity = look.key
+    scene.environmentIntensity = look.env
+    const az = THREE.MathUtils.degToRad(look.azimuth)
+    const el = THREE.MathUtils.degToRad(look.elevation)
+    const r = look.distance
+    direct.position.set(
+      r * Math.sin(az) * Math.cos(el),
+      r * Math.sin(el),
+      r * Math.cos(az) * Math.cos(el),
+    )
+    direct.shadow.radius = look.softness
+    const deskMat = ground.material as THREE.MeshStandardMaterial
+    const wallMat = wall.material as THREE.MeshStandardMaterial
+    deskMat.color.set(look.floor)
+    wallMat.color.set(look.wall)
+    scene.background = new THREE.Color(look.wall)
+  }
+  applyLook()
 
   const uniforms = createMeltUniforms()
   const anim = createMeltAnim()
@@ -93,6 +114,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   let subject: THREE.Object3D = createStandInBox(uniforms)
   carrier.add(subject)
   bindMeltBounds(subject, uniforms)
+  fitDesk(ground, subject)
   const restCenter = uniforms.uCenter.value.clone()
   const restMin = uniforms.uBoundsMin.value.clone()
   const restMax = uniforms.uBoundsMax.value.clone()
@@ -119,6 +141,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     carrier.add(subject)
     bindMeltBounds(subject, uniforms)
     captureRest()
+    fitDesk(ground, subject)
     const map = firstAlbedo(subject)
     if (puddle.parent) puddle.parent.remove(puddle)
     puddle = createPuddle(map)
@@ -158,9 +181,13 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     camera,
     renderer,
   })
+  const skipFilm = () => {
+    intro.skip()
+    applyLook()
+  }
   const skipIntro = shouldSkipIntro()
   if (skipIntro) {
-    intro.skip()
+    skipFilm()
     document.body.classList.add('ready')
   } else {
     controls.enabled = false
@@ -183,8 +210,10 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   attachDebugMenu({
     uniforms,
     anim,
+    look,
+    onLook: applyLook,
     onPlay: () => {
-      intro.skip()
+      skipFilm()
       document.body.classList.remove('filming')
       document.body.classList.add('ready')
       anim.scrubbing = false
@@ -195,7 +224,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
       controls.enabled = true
     },
     onReform: () => {
-      intro.skip()
+      skipFilm()
       document.body.classList.remove('filming')
       document.body.classList.add('ready')
       anim.scrubbing = false
@@ -280,7 +309,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
 
   window.addEventListener('keydown', (event) => {
     if (event.code === 'Escape' && intro.active) {
-      intro.skip()
+      skipFilm()
       resetTour(tour)
       sequenceLock = false
       meltedAway = false
@@ -309,7 +338,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   })
 
   reset?.addEventListener('click', () => {
-    intro.skip()
+    skipFilm()
     camera.position.copy(home.position)
     controls.target.copy(home.target)
     anim.scrubbing = false
@@ -416,6 +445,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     }
     if (cue === 'tour') startSplashTour(true)
     if (cue === 'live') {
+      applyLook()
       controls.target.copy(home.target)
       camera.position.copy(home.position)
       const yaw = new THREE.Vector3(0, 1, 0)
