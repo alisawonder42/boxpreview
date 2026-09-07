@@ -207,17 +207,19 @@ export type Intro = {
 
 export function shouldSkipIntro() {
   const params = new URLSearchParams(window.location.search)
-  if (params.has('skip') || params.get('intro') === '0') return true
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (params.get('intro') === '1' || params.get('intro') === 'true') {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  }
+  return true
 }
 
 export function createIntro(options: {
   camera: THREE.PerspectiveCamera
   renderer: THREE.WebGLRenderer
-  rig: IntroRig
-  setDof: (focus: number, aperture: number) => void
+  rig?: Partial<IntroRig>
+  setDof?: (focus: number, aperture: number) => void
 }): Intro {
-  const { camera, renderer, rig, setDof } = options
+  const { camera, renderer, rig = {}, setDof } = options
   const look = new THREE.Vector3()
   let chapter: IntroChapter = 'film'
   let t = 0
@@ -241,20 +243,22 @@ export function createIntro(options: {
       camera.updateProjectionMatrix()
     }
     renderer.toneMappingExposure = key.exposure
-    rig.ambient.intensity = key.ambient
-    rig.direct.intensity = key.direct
-    rig.fill.intensity = key.fill
-    rig.windowDiffuse.intensity = key.window
-    rig.skyDiffuse.intensity = key.sky
-    rig.direct.position.set(key.light[0], key.light[1], key.light[2])
-    setDof(camera.position.distanceTo(look), key.aperture)
+    if (rig.ambient) rig.ambient.intensity = key.ambient
+    if (rig.direct) {
+      rig.direct.intensity = key.direct
+      rig.direct.position.set(key.light[0], key.light[1], key.light[2])
+    }
+    if (rig.fill) rig.fill.intensity = key.fill
+    if (rig.windowDiffuse) rig.windowDiffuse.intensity = key.window
+    if (rig.skyDiffuse) rig.skyDiffuse.intensity = key.sky
+    setDof?.(camera.position.distanceTo(look), key.aperture)
   }
 
   const goLive = () => {
     chapter = 'live'
     t = FILM_END
     pose(live)
-    setDof(camera.position.distanceTo(look.set(LIVE_TARGET[0], LIVE_TARGET[1], LIVE_TARGET[2])), 0)
+    setDof?.(camera.position.distanceTo(look.set(LIVE_TARGET[0], LIVE_TARGET[1], LIVE_TARGET[2])), 0)
   }
 
   const apply = () => {
@@ -270,13 +274,17 @@ export function createIntro(options: {
       camera.fov = THREE.MathUtils.lerp(fromFov, 32, u)
       camera.updateProjectionMatrix()
       renderer.toneMappingExposure = THREE.MathUtils.lerp(renderer.toneMappingExposure, live.exposure, 0.12)
-      rig.ambient.intensity = THREE.MathUtils.lerp(rig.ambient.intensity, live.ambient, 0.12)
-      rig.direct.intensity = THREE.MathUtils.lerp(rig.direct.intensity, live.direct, 0.12)
-      rig.fill.intensity = THREE.MathUtils.lerp(rig.fill.intensity, live.fill, 0.12)
-      rig.windowDiffuse.intensity = THREE.MathUtils.lerp(rig.windowDiffuse.intensity, 0, 0.16)
-      rig.skyDiffuse.intensity = THREE.MathUtils.lerp(rig.skyDiffuse.intensity, 0, 0.16)
-      rig.direct.position.lerp(new THREE.Vector3().fromArray(LIVE_LIGHT), 0.12)
-      setDof(camera.position.distanceTo(look), 0)
+      if (rig.ambient) rig.ambient.intensity = THREE.MathUtils.lerp(rig.ambient.intensity, live.ambient, 0.12)
+      if (rig.direct) {
+        rig.direct.intensity = THREE.MathUtils.lerp(rig.direct.intensity, live.direct, 0.12)
+        rig.direct.position.lerp(new THREE.Vector3().fromArray(LIVE_LIGHT), 0.12)
+      }
+      if (rig.fill) rig.fill.intensity = THREE.MathUtils.lerp(rig.fill.intensity, live.fill, 0.12)
+      if (rig.windowDiffuse) {
+        rig.windowDiffuse.intensity = THREE.MathUtils.lerp(rig.windowDiffuse.intensity, 0, 0.16)
+      }
+      if (rig.skyDiffuse) rig.skyDiffuse.intensity = THREE.MathUtils.lerp(rig.skyDiffuse.intensity, 0, 0.16)
+      setDof?.(camera.position.distanceTo(look), 0)
       return
     }
     const time = chapter === 'film' ? t : FILM_END

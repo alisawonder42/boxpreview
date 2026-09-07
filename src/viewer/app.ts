@@ -1,7 +1,6 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
-import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js'
 import {
   applyMeltAnim,
   bindMeltBounds,
@@ -14,13 +13,14 @@ import {
   createGround,
   createPuddle,
   createStandInBox,
+  createWall,
   findBundledScan,
   firstAlbedo,
   loadScanFromUrl,
   prepareLoadedScan,
   FLOOR,
+  WALL_COLOR,
 } from './models'
-import { createPost } from './post'
 import { attachDebugMenu } from './debug'
 import { createIntro, INTRO_HOME, shouldSkipIntro } from './intro'
 import { beginTour, createTour, isTouring, resetTour, SPLASH_HOLD, tickTour } from './tour'
@@ -36,11 +36,11 @@ export async function startViewer(canvas: HTMLCanvasElement) {
 
   const renderer = new THREE.WebGLRenderer({
     canvas,
-    antialias: false,
+    antialias: true,
     alpha: false,
     powerPreference: 'high-performance',
   })
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
   renderer.setSize(window.innerWidth, window.innerHeight)
   renderer.outputColorSpace = THREE.SRGBColorSpace
   renderer.toneMapping = THREE.ACESFilmicToneMapping
@@ -53,50 +53,35 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   pmrem.dispose()
 
   const scene = new THREE.Scene()
-  scene.background = new THREE.Color('#f4f1ea')
-  scene.fog = new THREE.Fog('#f4f1ea', 7, 16)
+  scene.background = new THREE.Color(WALL_COLOR)
+  scene.fog = new THREE.Fog(WALL_COLOR, 16, 32)
   scene.environment = env
   scene.environmentIntensity = 0.9
 
-  const camera = new THREE.PerspectiveCamera(32, window.innerWidth / window.innerHeight, 0.1, 40)
+  const camera = new THREE.PerspectiveCamera(32, window.innerWidth / window.innerHeight, 0.1, 48)
   camera.position.copy(INTRO_HOME.position)
 
-  RectAreaLightUniformsLib.init()
+  const hemi = new THREE.HemisphereLight('#e4e2de', '#ddd9d1', 0.58)
+  scene.add(hemi)
 
-  const ambient = new THREE.AmbientLight('#f6efe4', 1.8)
-  const hemi = new THREE.HemisphereLight('#fff8ef', '#e8dccb', 0)
-  scene.add(ambient, hemi)
-
-  const windowDiffuse = new THREE.RectAreaLight('#fff6ea', 0, 8, 5)
-  windowDiffuse.position.set(-3.6, 2.6, 1.4)
-  windowDiffuse.lookAt(0, 0.4, 0)
-  scene.add(windowDiffuse)
-
-  const skyDiffuse = new THREE.RectAreaLight('#fffaf3', 0, 10, 6)
-  skyDiffuse.position.set(0.2, 5.2, 0.4)
-  skyDiffuse.lookAt(0, 0.3, 0)
-  scene.add(skyDiffuse)
-
-  const direct = new THREE.DirectionalLight('#fff6ea', 1.08)
+  const direct = new THREE.DirectionalLight('#fff6ea', 0.9)
   direct.position.set(-3.2, 3.8, 2.4)
   direct.castShadow = true
-  direct.shadow.mapSize.set(2048, 2048)
+  direct.shadow.mapSize.set(1024, 1024)
   direct.shadow.camera.near = 1
-  direct.shadow.camera.far = 16
-  direct.shadow.camera.left = -4
-  direct.shadow.camera.right = 4
-  direct.shadow.camera.top = 4
-  direct.shadow.camera.bottom = -4
+  direct.shadow.camera.far = 14
+  direct.shadow.camera.left = -2.6
+  direct.shadow.camera.right = 2.6
+  direct.shadow.camera.top = 2.6
+  direct.shadow.camera.bottom = -2.6
   direct.shadow.radius = 6
-  direct.shadow.bias = -0.00015
+  direct.shadow.bias = -0.0002
   scene.add(direct)
-
-  const fill = new THREE.DirectionalLight('#f3ebe0', 1.21)
-  fill.position.set(2.8, 1.8, -1.4)
-  scene.add(fill)
 
   const ground = createGround()
   scene.add(ground)
+  const wall = createWall()
+  scene.add(wall)
 
   const uniforms = createMeltUniforms()
   const anim = createMeltAnim()
@@ -169,12 +154,9 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     target: INTRO_HOME.target.clone(),
   }
 
-  const post = createPost(renderer, scene, camera)
   const intro = createIntro({
     camera,
     renderer,
-    rig: { ambient, windowDiffuse, skyDiffuse, direct, fill },
-    setDof: post.setDof,
   })
   const skipIntro = shouldSkipIntro()
   if (skipIntro) {
@@ -197,8 +179,6 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   let down = new THREE.Vector2()
   let hintGone = false
   const puddleHome = new THREE.Vector3()
-
-  const ao = { blendIntensity: post.gtao.blendIntensity }
 
   attachDebugMenu({
     uniforms,
@@ -381,7 +361,6 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     camera.aspect = w / h
     camera.updateProjectionMatrix()
     renderer.setSize(w, h)
-    post.resize(w, h)
   })
 
   const loop = () => {
@@ -424,9 +403,6 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     if (!subject.parent) carrier.add(subject)
     direct.castShadow = solid
     ground.receiveShadow = solid
-    post.gtao.enabled = solid
-    post.setMeltBloom(0)
-    post.setMeltOcclusion(shown, ao.blendIntensity)
 
     puddle.visible = false
 
@@ -471,7 +447,47 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     }
 
     if (!intro.active) controls.update()
-    post.composer.render()
+    renderer.render(scene, camera)
+    const info = renderer.info.render
+    const lights = [] as Array<{ type: string; intensity: number; castShadow: boolean }>
+    const meshes = [] as Array<{ name: string; castShadow: boolean; receiveShadow: boolean; visible: boolean }>
+    scene.traverse((child) => {
+      if ((child as THREE.Light).isLight) {
+        const light = child as THREE.Light
+        lights.push({
+          type: child.type,
+          intensity: (light as THREE.Light & { intensity: number }).intensity,
+          castShadow: Boolean((light as THREE.DirectionalLight).castShadow),
+        })
+      }
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh
+        meshes.push({
+          name: mesh.name || mesh.geometry?.type || mesh.type,
+          castShadow: mesh.castShadow,
+          receiveShadow: mesh.receiveShadow,
+          visible: mesh.visible,
+        })
+      }
+    })
+    const stats = {
+      calls: info.calls,
+      triangles: info.triangles,
+      pixelRatio: renderer.getPixelRatio(),
+      shadowMap: direct.shadow.mapSize.x,
+      shadowType: renderer.shadowMap.type,
+      envIntensity: scene.environmentIntensity,
+      hasEnvMap: Boolean(scene.environment),
+      background: `#${(scene.background as THREE.Color).getHexString()}`,
+      fog: scene.fog ? (scene.fog as THREE.Fog).color.getHexString() : null,
+      lights,
+      meshes,
+    }
+    canvas.dataset.calls = String(info.calls)
+    canvas.dataset.triangles = String(info.triangles)
+    canvas.dataset.pixelRatio = String(renderer.getPixelRatio())
+    canvas.dataset.shadow = String(direct.shadow.mapSize.x)
+    ;(window as any).__sceneStats = stats
     requestAnimationFrame(loop)
   }
 
