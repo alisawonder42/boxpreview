@@ -13,11 +13,9 @@ import {
   createGround,
   createPuddle,
   createStandInBox,
-  createWall,
   findBundledScan,
   firstAlbedo,
   fitDesk,
-  fitWall,
   loadScanFromUrl,
   prepareLoadedScan,
   FLOOR,
@@ -56,7 +54,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   const look: LightLook = { ...DEFAULT_LIGHT }
 
   const scene = new THREE.Scene()
-  scene.background = new THREE.Color(look.wall)
+  scene.background = new THREE.Color(look.floor)
   scene.environment = env
   scene.environmentIntensity = look.env
 
@@ -80,8 +78,6 @@ export async function startViewer(canvas: HTMLCanvasElement) {
 
   const ground = createGround(look.deskGrain)
   scene.add(ground)
-  const wall = createWall(look.wallGrain, look.wallPatch)
-  scene.add(wall)
 
   let subject!: THREE.Object3D
 
@@ -103,22 +99,11 @@ export async function startViewer(canvas: HTMLCanvasElement) {
       uBaseColor: { value: THREE.Color }
       uGrainStrength: { value: number }
     }
-    const wallSurface = wall.userData.surface as {
-      uBaseColor: { value: THREE.Color }
-      uGrainStrength: { value: number }
-      uPatchStrength: { value: number }
-    }
     deskSurface.uBaseColor.value.set(look.floor)
     deskSurface.uGrainStrength.value = look.deskGrain
     ;(ground.material as THREE.MeshStandardMaterial).color.set(look.floor)
-    wallSurface.uBaseColor.value.set(look.wall)
-    wallSurface.uGrainStrength.value = look.wallGrain
-    wallSurface.uPatchStrength.value = look.wallPatch
-    scene.background = new THREE.Color(look.wall)
-    if (subject) {
-      fitDesk(ground, subject, look.deskSize)
-      fitWall(wall, ground)
-    }
+    scene.background = new THREE.Color(look.floor)
+    if (subject) fitDesk(ground, subject, look.deskSize)
   }
   applyLook()
 
@@ -133,7 +118,6 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   carrier.add(subject)
   bindMeltBounds(subject, uniforms)
   fitDesk(ground, subject, look.deskSize)
-  fitWall(wall, ground)
   const restCenter = uniforms.uCenter.value.clone()
   const restMin = uniforms.uBoundsMin.value.clone()
   const restMax = uniforms.uBoundsMax.value.clone()
@@ -161,7 +145,6 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     bindMeltBounds(subject, uniforms)
     captureRest()
     fitDesk(ground, subject, look.deskSize)
-    fitWall(wall, ground)
     const map = firstAlbedo(subject)
     if (puddle.parent) puddle.parent.remove(puddle)
     puddle = createPuddle(map)

@@ -12,10 +12,7 @@ export type LightLook = {
   softness: number
   deskSize: number
   floor: string
-  wall: string
   deskGrain: number
-  wallGrain: number
-  wallPatch: number
 }
 
 export const DEFAULT_LIGHT: LightLook = {
@@ -29,10 +26,7 @@ export const DEFAULT_LIGHT: LightLook = {
   softness: 8,
   deskSize: 5,
   floor: '#e4dfd4',
-  wall: '#b9b8b4',
   deskGrain: 0.04,
-  wallGrain: 0.035,
-  wallPatch: 0.05,
 }
 
 type DebugOptions = {
@@ -98,9 +92,6 @@ export function attachDebugMenu(options: DebugOptions) {
   light.add(look, 'deskSize', 2, 10, 0.1).name('desk size').onChange(apply)
   light.addColor(look, 'floor').name('desk').onChange(apply)
   light.add(look, 'deskGrain', 0, 0.16, 0.001).name('desk grain').onChange(apply)
-  light.addColor(look, 'wall').name('wall').onChange(apply)
-  light.add(look, 'wallGrain', 0, 0.16, 0.001).name('wall grain').onChange(apply)
-  light.add(look, 'wallPatch', 0, 0.2, 0.001).name('wall patches').onChange(apply)
   light.add(
     {
       reset: () => {
