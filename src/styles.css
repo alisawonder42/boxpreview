@@ -33,8 +33,7 @@ body.embed [data-chrome] {
   display: none;
 }
 
-body.filming [data-chrome],
-body.filming .lil-gui {
+body.filming [data-chrome] {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;

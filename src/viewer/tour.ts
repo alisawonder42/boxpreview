@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 
 /** Parked melt progress: splash is formed, fade has not eaten it. */
-export const SPLASH_HOLD = 0.62
+export const SPLASH_HOLD = 0.8
 
 export const TOUR = {
   crawlSeconds: 5.2,
