@@ -189,6 +189,8 @@ vec2 planeDir(vec3 n) {
   return vec2(0.7071, 0.7071);
 }
 
+// Keep all palette selection on the live uCyan/uRed/uWhite uniforms.
+// This avoids stale shader symbol names causing the fullscreen pass to fail compilation.
 vec3 chooseInk(vec2 cellId) {
   float total = max(uCyanPercent + uRedPercent + uWhitePercent, 0.001);
   float cyanCut = max(uCyanPercent, 0.0) / total;
