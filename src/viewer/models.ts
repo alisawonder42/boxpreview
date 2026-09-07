@@ -248,19 +248,26 @@ export function fitDesk(mesh: THREE.Mesh, object: THREE.Object3D, multiple = 5) 
 }
 
 export function createWall() {
-  const geo = new THREE.PlaneGeometry(22, 14)
-  const mat = new THREE.MeshStandardMaterial({
-    color: WALL_COLOR,
-    roughness: 1,
-    metalness: 0,
-    envMapIntensity: 0,
-  })
+  const geo = new THREE.PlaneGeometry(48, 48)
+  const mat = new THREE.MeshBasicMaterial({ color: WALL_COLOR })
   const mesh = new THREE.Mesh(geo, mat)
   mesh.name = 'wall'
   mesh.castShadow = false
   mesh.receiveShadow = false
-  mesh.position.set(0, 6.9, -7.2)
+  mesh.position.set(0, 24, -4)
   return mesh
+}
+
+export function fitWall(wall: THREE.Mesh, desk: THREE.Mesh) {
+  desk.updateMatrixWorld(true)
+  const box = new THREE.Box3().setFromObject(desk)
+  if (box.isEmpty()) return
+  const size = box.getSize(new THREE.Vector3())
+  const width = Math.max(size.x * 8, 32)
+  const height = Math.max(size.z * 10, 28)
+  wall.geometry.dispose()
+  wall.geometry = new THREE.PlaneGeometry(width, height)
+  wall.position.set((box.min.x + box.max.x) * 0.5, height * 0.5, box.min.z - 0.04)
 }
 
 export function createPuddle(map: THREE.Texture | null) {
