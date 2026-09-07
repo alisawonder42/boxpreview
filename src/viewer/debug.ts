@@ -70,26 +70,15 @@ export function attachDebugMenu(options: DebugOptions) {
   ).name('Reset lights')
 
   if (lens) {
-    const folder = gui.addFolder('Technical Lens')
+    const folder = gui.addFolder('Emerald Lens')
     folder.add(lens, 'enabled').name('enabled')
-    folder.add(lens, 'lensSize', 120, 500, 1).name('lens size')
-    folder.add(lens, 'cellSize', 8, 18, 0.5).name('cell size')
-    folder.add(lens, 'surfaceDensity', 0, 0.7, 0.01).name('surface density')
-    folder.add(lens, 'backgroundDensity', 0, 0.2, 0.005).name('background density')
-    folder.add(lens, 'markBrightness', 0.2, 2, 0.01).name('mark brightness')
-    folder.add(lens, 'vectorLength', 0.15, 0.6, 0.01).name('glyph size')
-    folder.add(lens, 'animSpeed', 0, 2, 0.01).name('pulse speed')
-    folder.add(lens, 'pulseAmount', 0, 0.5, 0.01).name('pulse amount')
-    folder.add(lens, 'glyphSpeed', 0, 3, 0.01).name('glyph switch speed')
-    folder.add(lens, 'scanSpeed', 0, 1, 0.01).name('scan speed')
-    folder.add(lens, 'scanBoost', 0, 1, 0.01).name('scan boost')
-
-    folder.addColor(lens, 'cyan').name('color 1 · cyan')
-    folder.add(lens, 'cyanPercent', 0, 100, 1).name('color 1 %')
-    folder.addColor(lens, 'red').name('color 2 · red')
-    folder.add(lens, 'redPercent', 0, 100, 1).name('color 2 %')
-    folder.addColor(lens, 'white').name('color 3 · white')
-    folder.add(lens, 'whitePercent', 0, 100, 1).name('color 3 %')
+    folder.add(lens, 'lensSize', 120, 600, 1).name('square size')
+    folder.add(lens, 'roughness', 0.16, 0.6, 0.01).name('roughness')
+    folder.add(lens, 'brightness', 0.5, 3, 0.01).name('reflections')
+    folder.add(lens, 'sparkle', 0, 2, 0.01).name('gold glints')
+    folder.add(lens, 'grain', 0, 0.4, 0.01).name('grain')
+    folder.add(lens, 'interference', 0, 1, 0.01).name('horizontal lines')
+    folder.add(lens, 'animSpeed', 0, 2, 0.01).name('animation speed')
 
     folder.add(
       {

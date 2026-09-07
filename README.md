@@ -42,3 +42,18 @@ Embed: `https://alisawonder42.github.io/boxpreview/?embed=1`
 `?embed=1` hides the title chrome so only the object remains.
 
 Or copy `src/viewer` into the portfolio and mount the canvas there. It is vanilla Three.js — no React.
+
+## Emerald square lens
+
+Move the pointer over the canvas to reveal an emerald metallic rendering in a square.
+Drag to rotate as before. The original and emerald passes share a camera, geometry,
+and full drawing-buffer resolution, so the relief stays aligned. Normal, bump, and
+AO maps are retained when supplied by a model. Fine mint/gold glints follow the
+surface; restrained horizontal interference and grain are composited afterward.
+Use **Look → Emerald Lens** to tune square size, roughness, reflections, glints,
+grain, interference, and animation speed. Animation respects reduced-motion settings.
+The extra material pass runs only while the lens is active.
+
+Validation: production build passes. The available remote preview browser has
+WebGL disabled, so GPU shader compilation and visual matching need verification
+in a WebGL-capable browser.
