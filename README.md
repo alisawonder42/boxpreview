@@ -19,7 +19,7 @@ Production build: `npm run build`. Preview it with `npm run preview`.
 
 ## Your scan
 
-The viewer loads **`Box-cleaned.glb`** (cleaned scan + filled underside), and falls back to **`BoxModel.fbx`**. You can also drop a `.glb` or `.fbx` onto the page.
+The viewer loads **`Box-cleaned.glb`**. You can also drop another `.glb` or `.fbx` onto the page.
 
 ## GitHub Pages
 

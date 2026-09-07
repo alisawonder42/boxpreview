@@ -1,5 +1,5 @@
 # Scan
 
-The viewer loads **`BoxModel.fbx`**. KIRI still names the sidecar **`3DModel.fbm/3DModel.jpg`**.
+The viewer loads **`Box-cleaned.glb`**.
 
-You can also drag a `.fbx` onto the running page.
+You can also drop a `.glb` or `.fbx` onto the running page.

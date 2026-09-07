@@ -11,11 +11,7 @@ const SCAN_CANDIDATES = [
   './public/models/Box-cleaned.glb',
   'public/models/Box-cleaned.glb',
   './Box-cleaned.glb',
-  './models/BoxModel.fbx',
-  './BoxModel.fbx',
-  'BoxModel.fbx',
   'https://cdn.jsdelivr.net/gh/alisawonder42/boxpreview@main/public/models/Box-cleaned.glb',
-  'https://cdn.jsdelivr.net/gh/alisawonder42/boxpreview@main/BoxModel.fbx',
 ]
 
 function scanKind(url: string, fileName = '') {
@@ -162,7 +158,7 @@ export async function findBundledScan() {
 }
 
 export function configureScanTexture(map: THREE.Texture, anisotropy = 8) {
-  // Leave flipY alone. FBX/TextureLoader uses true; glTF uses false.
+  // Leave flipY alone. TextureLoader uses true; glTF uses false.
   // Forcing false on this KIRI atlas samples the wrong islands.
   map.colorSpace = THREE.SRGBColorSpace
   map.anisotropy = Math.max(map.anisotropy, anisotropy)
@@ -254,7 +250,7 @@ function meshBounds(object: THREE.Object3D) {
 }
 
 export function sitOnFloor(object: THREE.Object3D, top = FLOOR) {
-  // KIRI FBX files sit far from the origin (cm-scale child + offset mesh).
+  // Photogrammetry scans often sit far from the origin.
   // Scale first, then recenter — scaling after a translate pivots around the
   // object's origin and throws the box off the desk.
   const box = meshBounds(object)
