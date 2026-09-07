@@ -74,10 +74,14 @@ export function attachDebugMenu(options: DebugOptions) {
     folder.add(lens, 'enabled').name('enabled')
     folder.add(lens, 'lensSize', 120, 500, 1).name('lens size')
     folder.add(lens, 'cellSize', 4, 16, 0.5).name('cell size')
-    folder.add(lens, 'edgeStrength', 0, 3, 0.01).name('edge strength')
-    folder.add(lens, 'lumaInfluence', 0, 1.5, 0.01).name('luminance')
-    folder.add(lens, 'glyphBrightness', 0.2, 2, 0.01).name('glyph brightness')
-    folder.add(lens, 'glitch', 0, 0.15, 0.001).name('glitch amount')
+    folder.add(lens, 'edgeStrength', 0, 4, 0.01).name('edge strength')
+    folder.add(lens, 'coarseInfluence', 0, 1.5, 0.01).name('coarse edge')
+    folder.add(lens, 'fineInfluence', 0, 1.5, 0.01).name('fine edge')
+    folder.add(lens, 'lumaInfluence', 0, 1, 0.01).name('luminance')
+    folder.add(lens, 'ambientDensity', 0, 0.6, 0.01).name('ambient density')
+    folder.add(lens, 'markBrightness', 0.2, 2, 0.01).name('mark brightness')
+    folder.add(lens, 'vectorLength', 0.3, 0.9, 0.01).name('vector length')
+    folder.add(lens, 'glitch', 0, 0.15, 0.001).name('instability')
     folder.add(lens, 'animSpeed', 0, 2, 0.01).name('animation speed')
     folder.add(
       {

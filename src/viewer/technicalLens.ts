@@ -6,21 +6,29 @@ export type LensParams = {
   lensSize: number
   cellSize: number
   edgeStrength: number
+  coarseInfluence: number
+  fineInfluence: number
   lumaInfluence: number
-  glyphBrightness: number
+  ambientDensity: number
+  markBrightness: number
+  vectorLength: number
   glitch: number
   animSpeed: number
 }
 
 export const DEFAULT_LENS: LensParams = {
   enabled: true,
-  lensSize: 260,
-  cellSize: 8,
-  edgeStrength: 1.4,
-  lumaInfluence: 0.32,
-  glyphBrightness: 1.05,
-  glitch: 0.045,
-  animSpeed: 0.65,
+  lensSize: 240,
+  cellSize: 7,
+  edgeStrength: 2.0,
+  coarseInfluence: 0.72,
+  fineInfluence: 0.28,
+  lumaInfluence: 0.14,
+  ambientDensity: 0.28,
+  markBrightness: 1.12,
+  vectorLength: 0.58,
+  glitch: 0.016,
+  animSpeed: 0.3,
 }
 
 const VERTEX = /* glsl */ `
@@ -42,15 +50,18 @@ uniform float uActive;
 uniform float uEnabled;
 uniform float uTime;
 uniform float uEdgeStrength;
+uniform float uCoarse;
+uniform float uFine;
 uniform float uLumaInfluence;
-uniform float uGlyphBrightness;
+uniform float uAmbient;
+uniform float uMarkBrightness;
+uniform float uVectorLength;
 uniform float uGlitch;
 uniform float uAnimSpeed;
 uniform vec3 uCyan;
 uniform vec3 uRed;
 uniform vec3 uYellow;
 uniform vec3 uWhite;
-uniform vec3 uViolet;
 
 varying vec2 vUv;
 
@@ -72,51 +83,47 @@ float sdSegment(vec2 p, vec2 a, vec2 b) {
 }
 
 float stroke(float d, float width) {
-  float aa = max(fwidth(d), 0.0015);
+  float aa = max(fwidth(d), 0.0012);
   return 1.0 - smoothstep(width, width + aa, d);
 }
 
-float glyphDot(vec2 p) {
-  return stroke(length(p) - 0.015, 0.028);
+float orientedLine(vec2 p, vec2 dir, float halfLen, float thick) {
+  vec2 n = dir * inversesqrt(max(dot(dir, dir), 1e-8));
+  return stroke(sdSegment(p, -n * halfLen, n * halfLen), thick);
 }
 
-float glyphH(vec2 p) {
-  return stroke(sdSegment(p, vec2(-0.34, 0.0), vec2(0.34, 0.0)), 0.018);
+float markDot(vec2 p) {
+  return stroke(length(p) - 0.012, 0.02);
 }
 
-float glyphV(vec2 p) {
-  return stroke(sdSegment(p, vec2(0.0, -0.34), vec2(0.0, 0.34)), 0.018);
+float markPlus(vec2 p, float s) {
+  float a = stroke(sdSegment(p, vec2(-s, 0.0), vec2(s, 0.0)), 0.015);
+  float b = stroke(sdSegment(p, vec2(0.0, -s), vec2(0.0, s)), 0.015);
+  return max(a, b);
 }
 
-float glyphSlash(vec2 p) {
-  return stroke(sdSegment(p, vec2(-0.28, -0.28), vec2(0.28, 0.28)), 0.018);
+float markX(vec2 p, float s) {
+  float a = stroke(sdSegment(p, vec2(-s, -s), vec2(s, s)), 0.015);
+  float b = stroke(sdSegment(p, vec2(-s, s), vec2(s, -s)), 0.015);
+  return max(a, b);
 }
 
-float glyphBack(vec2 p) {
-  return stroke(sdSegment(p, vec2(-0.28, 0.28), vec2(0.28, -0.28)), 0.018);
+vec2 imageGrad(vec2 uv, float distPx) {
+  vec2 span = vec2(distPx) / uResolution;
+  float lL = luma(texture2D(tScene, uv - vec2(span.x, 0.0)).rgb);
+  float lR = luma(texture2D(tScene, uv + vec2(span.x, 0.0)).rgb);
+  float lD = luma(texture2D(tScene, uv - vec2(0.0, span.y)).rgb);
+  float lU = luma(texture2D(tScene, uv + vec2(0.0, span.y)).rgb);
+  return vec2(lR - lL, lU - lD);
 }
 
-float glyphPlus(vec2 p) {
-  return max(glyphH(p), glyphV(p));
-}
-
-float glyphX(vec2 p) {
-  return max(glyphSlash(p), glyphBack(p));
-}
-
-vec3 pickColor(int kind, float mag, float h) {
-  vec3 a = uCyan;
-  vec3 b = uRed;
-  if (kind == 1 || kind == 2) a = uCyan;
-  else if (kind == 3) a = uRed;
-  else if (kind == 4) { a = uYellow; b = uCyan; }
-  else if (kind == 5) { a = uViolet; b = uRed; }
-  else if (kind == 6) { a = uWhite; b = uCyan; }
-  else { a = uRed; b = uYellow; }
-
-  vec3 color = mix(a, b, step(0.82, h) * 0.55);
-  if (h > 0.93 && mag > 0.12) color = mix(color, uWhite, 0.35);
-  if (h < 0.08 && mag > 0.18) color = mix(color, uViolet, 0.4);
+vec3 fieldColor(vec2 tangent, float structure, float h) {
+  float horiz = abs(tangent.x);
+  vec3 color = mix(uRed, uCyan, smoothstep(0.32, 0.68, horiz));
+  color = mix(color, mix(uCyan, uRed, h), 0.12);
+  if (structure > 0.34 && h > 0.72) color = mix(color, uWhite, 0.55);
+  else if (structure > 0.22 && h > 0.9) color = mix(color, uWhite, 0.28);
+  if (h > 0.985 && structure > 0.18) color = mix(color, uYellow, 0.45);
   return color;
 }
 
@@ -126,68 +133,71 @@ vec3 technical(vec2 frag) {
   vec2 origin = cellId * cell;
   vec2 local = (frag - origin) / cell - 0.5;
 
-  float tq = floor(uTime * mix(3.0, 14.0, uAnimSpeed));
   float h = hash21(cellId);
-  float ht = hash21(cellId + vec2(tq, 17.0));
-  float rowH = hash21(vec2(cellId.y, tq));
+  float h2 = hash21(cellId + 19.17);
+  float h3 = hash21(cellId.yx + 4.2);
+  float tq = floor(uTime / mix(0.48, 0.22, clamp(uAnimSpeed, 0.0, 1.0)));
+  float ht = hash21(cellId + vec2(tq, 8.0));
 
-  local.x += (rowH - 0.5) * uGlitch * 0.35;
-  local += (vec2(hash21(cellId.yx), hash21(cellId + 9.1)) - 0.5) * 0.04;
-
-  if (ht < uGlitch * 0.55) return vec3(0.0);
-
-  vec2 center = origin + cell * 0.5;
+  local += vec2(h - 0.5, h2 - 0.5) * 0.16;
+  vec2 center = origin + cell * (0.5 + vec2(h - 0.5, h3 - 0.5) * 0.1);
   vec2 uv = center / uResolution;
-  vec2 span = vec2(cell * 0.42) / uResolution;
 
-  vec3 cC = texture2D(tScene, uv).rgb;
-  vec3 cL = texture2D(tScene, uv - vec2(span.x, 0.0)).rgb;
-  vec3 cR = texture2D(tScene, uv + vec2(span.x, 0.0)).rgb;
-  vec3 cD = texture2D(tScene, uv - vec2(0.0, span.y)).rgb;
-  vec3 cU = texture2D(tScene, uv + vec2(0.0, span.y)).rgb;
+  vec2 gFine = imageGrad(uv, cell * 0.5);
+  vec2 gCoarse = imageGrad(uv, cell * 1.7);
+  vec2 g = gCoarse * uCoarse + gFine * uFine;
+  float magFine = length(gFine);
+  float magCoarse = length(gCoarse);
+  float mag = length(g);
+  vec2 tangent = vec2(-g.y, g.x);
+  tangent *= inversesqrt(max(dot(tangent, tangent), 1e-8));
 
-  float l = luma(cC);
-  float dx = luma(cR) - luma(cL);
-  float dy = luma(cU) - luma(cD);
-  float mag = length(vec2(dx, dy));
-  float structure = l * uLumaInfluence + mag * uEdgeStrength;
+  float l = luma(texture2D(tScene, uv).rgb);
+  float structure =
+    magCoarse * uEdgeStrength +
+    magFine * uEdgeStrength * 0.32 +
+    l * uLumaInfluence;
 
-  int kind = 0;
-  float adx = abs(dx);
-  float ady = abs(dy);
-  if (structure < 0.045) {
-    kind = 0;
-  } else if (mag > 0.22) {
-    kind = abs(adx - ady) < mag * 0.28 ? 7 : 6;
-  } else if (adx > ady * 1.35) {
-    kind = 2;
-  } else if (ady > adx * 1.35) {
-    kind = 3;
+  float lenJitter = mix(0.88, 1.08, h2);
+  float liveLen = mix(1.0, mix(0.94, 1.05, ht), uGlitch * 4.0);
+  float halfLen = clamp(uVectorLength * 0.5 * lenJitter * liveLen, 0.16, 0.38);
+  float thick = mix(0.011, 0.016, smoothstep(0.08, 0.3, magCoarse));
+  float liveBright = mix(1.0, mix(0.88, 1.06, ht), 0.35 + uAnimSpeed * 0.2);
+
+  vec3 color = vec3(0.0);
+
+  if (structure > 0.11) {
+    float edge = smoothstep(0.11, 0.36, structure);
+    float intensity = mix(0.55, 1.0, edge) * uMarkBrightness * mix(0.9, 1.08, h) * liveBright;
+    float gLine = orientedLine(local, tangent, halfLen * mix(0.78, 1.05, edge), thick);
+    color += fieldColor(tangent, structure, h) * gLine * intensity;
+
+    if (structure > 0.26 && h2 > 0.52 && h2 < 0.78) {
+      vec2 normal = vec2(-tangent.y, tangent.x);
+      float off = mix(0.5, 1.35, h3) / cell;
+      float g2 = orientedLine(local + normal * off, tangent, halfLen * 0.82, thick * 0.75);
+      vec3 alt = mix(uRed, uCyan, 1.0 - smoothstep(0.32, 0.68, abs(tangent.x)));
+      color += alt * g2 * intensity * 0.42;
+    }
+
+    if (structure > 0.28 && h > 0.9) {
+      float punct = h > 0.96 ? markX(local, 0.16) : markPlus(local, 0.18);
+      color += mix(uWhite, uCyan, 0.35) * punct * intensity * 0.95;
+    }
   } else {
-    kind = dx * dy >= 0.0 ? 4 : 5;
+    float appear = step(1.0 - uAmbient, h);
+    float flicker = mix(appear, step(1.0 - uAmbient * mix(0.85, 1.15, ht), h3), 0.25);
+    if (flicker < 0.5) return vec3(0.0);
+    float dim = 0.16 * uMarkBrightness * mix(0.75, 1.0, h2) * liveBright;
+    if (h3 > 0.62) {
+      vec2 fallback = normalize(mix(vec2(1.0, 0.12), tangent, 0.35));
+      color += mix(uCyan, uRed, step(0.55, h)) * orientedLine(local, fallback, 0.12, 0.012) * dim;
+    } else {
+      color += mix(uCyan, uWhite, 0.2) * markDot(local) * dim * 1.15;
+    }
   }
 
-  if (ht > 1.0 - uGlitch * 0.8) {
-    kind = int(floor(hash21(cellId + 3.7) * 8.0));
-  }
-
-  float g = 0.0;
-  if (kind == 0) g = glyphDot(local);
-  else if (kind == 2) g = glyphH(local);
-  else if (kind == 3) g = glyphV(local);
-  else if (kind == 4) g = glyphSlash(local);
-  else if (kind == 5) g = glyphBack(local);
-  else if (kind == 6) g = glyphPlus(local);
-  else g = glyphX(local);
-
-  float intensity = smoothstep(0.02, 0.42, structure);
-  intensity *= mix(0.55, 1.0, smoothstep(0.04, 0.28, mag));
-  intensity *= mix(0.82, 1.08, h);
-  intensity *= uGlyphBrightness;
-  intensity *= mix(1.0, 0.7, step(0.97, ht));
-
-  vec3 mark = pickColor(kind, mag, h) * g * intensity;
-  return mark;
+  return color;
 }
 
 void main() {
@@ -227,15 +237,18 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     uEnabled: { value: params.enabled ? 1 : 0 },
     uTime: { value: 0 },
     uEdgeStrength: { value: params.edgeStrength },
+    uCoarse: { value: params.coarseInfluence },
+    uFine: { value: params.fineInfluence },
     uLumaInfluence: { value: params.lumaInfluence },
-    uGlyphBrightness: { value: params.glyphBrightness },
+    uAmbient: { value: params.ambientDensity },
+    uMarkBrightness: { value: params.markBrightness },
+    uVectorLength: { value: params.vectorLength },
     uGlitch: { value: params.glitch },
     uAnimSpeed: { value: params.animSpeed },
     uCyan: { value: new THREE.Color('#36DDF5') },
     uRed: { value: new THREE.Color('#FF3B61') },
     uYellow: { value: new THREE.Color('#FFE18A') },
     uWhite: { value: new THREE.Color('#DCEEFF') },
-    uViolet: { value: new THREE.Color('#A88CFF') },
   }
 
   const material = new THREE.ShaderMaterial({
@@ -290,8 +303,12 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     uniforms.uEnabled.value = params.enabled ? 1 : 0
     uniforms.uActive.value = pointerActive && params.enabled ? 1 : 0
     uniforms.uEdgeStrength.value = params.edgeStrength
+    uniforms.uCoarse.value = params.coarseInfluence
+    uniforms.uFine.value = params.fineInfluence
     uniforms.uLumaInfluence.value = params.lumaInfluence
-    uniforms.uGlyphBrightness.value = params.glyphBrightness
+    uniforms.uAmbient.value = params.ambientDensity
+    uniforms.uMarkBrightness.value = params.markBrightness
+    uniforms.uVectorLength.value = params.vectorLength
     uniforms.uGlitch.value = params.glitch
     uniforms.uAnimSpeed.value = params.animSpeed
     syncSizeUniforms()
