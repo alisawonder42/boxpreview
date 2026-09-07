@@ -103,9 +103,12 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   controls.maxDistance = 4.6
   controls.minPolarAngle = 0.72
   controls.maxPolarAngle = 1.42
+  camera.position.copy(HOME_POSITION)
   controls.target.copy(HOME_TARGET)
+  controls.enableDamping = false
   controls.update()
   controls.saveState()
+  controls.enableDamping = true
 
   const pointerPixels = new THREE.Vector2(-1, -1)
   const pointerNDC = new THREE.Vector2(0, 0)
@@ -137,7 +140,9 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   canvas.addEventListener('pointerdown', hideHint)
 
   reset?.addEventListener('click', () => {
+    controls.enableDamping = false
     controls.reset()
+    controls.enableDamping = true
   })
 
   const loadFile = async (file: File) => {
