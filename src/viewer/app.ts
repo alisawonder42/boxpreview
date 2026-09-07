@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js'
 import {
   applyMeltAnim,
@@ -47,9 +48,15 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = THREE.PCFSoftShadowMap
 
+  const pmrem = new THREE.PMREMGenerator(renderer)
+  const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
+  pmrem.dispose()
+
   const scene = new THREE.Scene()
   scene.background = new THREE.Color('#f4f1ea')
   scene.fog = new THREE.Fog('#f4f1ea', 7, 16)
+  scene.environment = env
+  scene.environmentIntensity = 0.9
 
   const camera = new THREE.PerspectiveCamera(32, window.innerWidth / window.innerHeight, 0.1, 40)
   camera.position.copy(INTRO_HOME.position)
@@ -194,13 +201,12 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   const ao = { blendIntensity: post.gtao.blendIntensity }
 
   attachDebugMenu({
-    renderer,
-    rig: { ambient, hemi, windowDiffuse, skyDiffuse, direct, fill },
     uniforms,
     anim,
-    gtao: ao,
-    controls,
     onPlay: () => {
+      intro.skip()
+      document.body.classList.remove('filming')
+      document.body.classList.add('ready')
       anim.scrubbing = false
       resetTour(tour)
       sequenceLock = false
@@ -209,6 +215,9 @@ export async function startViewer(canvas: HTMLCanvasElement) {
       controls.enabled = true
     },
     onReform: () => {
+      intro.skip()
+      document.body.classList.remove('filming')
+      document.body.classList.add('ready')
       anim.scrubbing = false
       resetTour(tour)
       sequenceLock = false
@@ -259,7 +268,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     if (!scripted && (intro.shouldBlockInput() || sequenceLock)) return
     anim.scrubbing = false
     sequenceLock = true
-    puddle.getWorldPosition(puddleHome)
+    puddleHome.set(restCenter.x, FLOOR, restCenter.z)
     beginTour(tour, camera, puddleHome)
     controls.enabled = false
   }
@@ -393,7 +402,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     if (anim.scrubbing) {
       melt = anim.progress
       meltTarget = anim.progress
-      meltedAway = anim.progress > 0.85
+      meltedAway = anim.progress > SPLASH_HOLD * 0.72
     } else if (!isTouring(tour)) {
       const rate = meltTarget > melt ? anim.meltIn : anim.meltOut
       melt = THREE.MathUtils.damp(melt, meltTarget, rate, dt)
@@ -409,31 +418,17 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     uniforms.uCenter.value.copy(restCenter).add(tour.offset)
     uniforms.uBoundsMin.value.copy(restMin).add(tour.offset)
     uniforms.uBoundsMax.value.copy(restMax).add(tour.offset)
-    setMeltLook(subject, shown, uniforms)
-    const faded = 1 - THREE.MathUtils.smoothstep(anim.fadeStart, anim.fadeEnd, shown)
-    const present = faded > 0.04 || isTouring(tour)
+    setMeltLook(subject, shown, uniforms, anim)
     const solid = shown < 0.05 && !isTouring(tour)
-    subject.visible = present
-    if (present && !subject.parent) carrier.add(subject)
-    if (!present && subject.parent) subject.parent.remove(subject)
-    // Default depth still sees the undeformed scan. Kill the solid-box
-    // shadow as soon as the melt starts so it cannot linger.
+    subject.visible = true
+    if (!subject.parent) carrier.add(subject)
     direct.castShadow = solid
     ground.receiveShadow = solid
     post.gtao.enabled = solid
-    post.setMeltBloom(present ? shown : 0)
+    post.setMeltBloom(0)
     post.setMeltOcclusion(shown, ao.blendIntensity)
 
-    const puddleMat = puddle.material as THREE.MeshPhysicalMaterial
-    const puddleIn = THREE.MathUtils.smoothstep(anim.puddleInStart, anim.puddleInEnd, shown)
-    const puddleOut = 1 - THREE.MathUtils.smoothstep(anim.puddleOutStart, anim.puddleOutEnd, shown)
-    puddle.visible = present && puddleIn * puddleOut > 0.02
-    puddle.castShadow = false
-    puddle.scale.setScalar(0.28 + puddleIn * 1.7)
-    puddle.position.x = THREE.MathUtils.lerp(0, 1.15, THREE.MathUtils.smoothstep(anim.drainStart, anim.drainEnd, shown))
-    puddle.position.y = FLOOR + 0.004
-    puddle.position.z = THREE.MathUtils.lerp(0, -0.55, THREE.MathUtils.smoothstep(anim.drainStart, anim.drainEnd, shown))
-    puddleMat.opacity = THREE.MathUtils.clamp(puddleIn * puddleOut * 0.9, 0, 0.9)
+    puddle.visible = false
 
     const splashReady = meltedAway && melt >= SPLASH_HOLD * 0.72 && !tour.playing
     const cue = intro.tick(dt, { splashReady, boxSolid })
