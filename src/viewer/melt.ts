@@ -121,10 +121,10 @@ export function createMeltAnim(): MeltAnim {
     drainTravel: 0,
     blobHeight: 0.03,
     blobPlump: 0.95,
-    blobLobes: 0.95,
+    blobLobes: 0.55,
     blobSpeed: 0.22,
     blobRadius: 0.9,
-    blobFreq: 4,
+    blobFreq: 1.8,
     blobGloss: 0.47,
     blobClearcoat: 0.25,
     puddleInStart: 0.1,
@@ -230,10 +230,10 @@ vec3 applyBlob(vec3 world) {
   vec2 nd = fromLen > 0.0001 ? from / fromLen : vec2(0.62, -0.28);
   float ang = atan(nd.y, nd.x);
 
-  float a1 = snoise(vec3(cos(ang) * uBlobFreq, uTime * uBlobSpeed * 0.32, sin(ang) * uBlobFreq));
-  float a2 = snoise(vec3(cos(ang * 2.0 + 1.4) * uBlobFreq * 0.65, 4.2, sin(ang * 2.0 + 1.4) * uBlobFreq * 0.65));
-  float a3 = snoise(vec3(cos(ang * 3.0 - 0.8) * 1.1, uTime * uBlobSpeed * 0.18, sin(ang * 3.0 - 0.8) * 1.1));
-  float outline = 1.0 + uBlobLobes * (0.36 * a1 + 0.3 * a2 + 0.22 * a3);
+  float a1 = snoise(vec3(cos(ang) * 1.15, 0.4, sin(ang) * 1.15));
+  float a2 = snoise(vec3(cos(ang * 2.0 + 1.4) * 0.85, 2.6, sin(ang * 2.0 + 1.4) * 0.85));
+  float a3 = snoise(vec3(cos(ang * 3.0 - 0.8) * 0.7, 5.1, sin(ang * 3.0 - 0.8) * 0.7));
+  float outline = 1.0 + 0.4 * uBlobLobes * (0.5 * a1 + 0.32 * a2 + 0.18 * a3);
 
   float footprint = max(0.16, uBlobRadius * uSpread);
   float hull = max(abs(from.x), abs(from.y));
