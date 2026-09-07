@@ -74,13 +74,14 @@ export function attachDebugMenu(options: DebugOptions) {
     folder.add(lens, 'enabled').name('enabled')
     folder.add(lens, 'lensSize', 120, 500, 1).name('lens size')
     folder.add(lens, 'cellSize', 8, 18, 0.5).name('cell size')
-    folder.add(lens, 'depthEdge', 0, 4, 0.01).name('depth edge strength')
-    folder.add(lens, 'surfaceDensity', 0, 0.5, 0.01).name('surface density')
+    folder.add(lens, 'surfaceDensity', 0, 0.7, 0.01).name('surface density')
     folder.add(lens, 'backgroundDensity', 0, 0.2, 0.005).name('background density')
-    folder.add(lens, 'vectorLength', 0.15, 0.6, 0.01).name('tick length')
     folder.add(lens, 'markBrightness', 0.2, 2, 0.01).name('mark brightness')
-    folder.add(lens, 'glitch', 0, 0.08, 0.001).name('instability')
-    folder.add(lens, 'animSpeed', 0, 1, 0.01).name('animation speed')
+    folder.add(lens, 'vectorLength', 0.15, 0.6, 0.01).name('vector length')
+    folder.add(lens, 'animSpeed', 0, 2, 0.01).name('animation speed')
+    folder.add(lens, 'pulseAmount', 0, 0.5, 0.01).name('pulse amount')
+    folder.add(lens, 'scanSpeed', 0, 1, 0.01).name('scan speed')
+    folder.add(lens, 'scanBoost', 0, 1, 0.01).name('scan boost')
     folder.add(
       {
         reset: () => {
