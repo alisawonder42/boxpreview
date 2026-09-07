@@ -21,6 +21,7 @@ import {
 } from './models'
 import { createPost } from './post'
 import { attachDebugMenu } from './debug'
+import { createIntro, INTRO_HOME, shouldSkipIntro } from './intro'
 import { beginTour, createTour, isTouring, resetTour, SPLASH_HOLD, tickTour } from './tour'
 
 const MOVE_PX = 7
@@ -51,7 +52,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   scene.fog = new THREE.Fog('#f4f1ea', 7, 16)
 
   const camera = new THREE.PerspectiveCamera(32, window.innerWidth / window.innerHeight, 0.1, 40)
-  camera.position.set(1.75, 1.08, 2.05)
+  camera.position.copy(INTRO_HOME.position)
 
   RectAreaLightUniformsLib.init()
 
@@ -155,19 +156,33 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   controls.maxPolarAngle = 1.42
   controls.autoRotate = false
   controls.autoRotateSpeed = 0
-  controls.target.set(0, FLOOR + 0.42, 0)
+  controls.target.copy(INTRO_HOME.target)
   const home = {
-    position: camera.position.clone(),
-    target: controls.target.clone(),
+    position: INTRO_HOME.position.clone(),
+    target: INTRO_HOME.target.clone(),
   }
 
   const post = createPost(renderer, scene, camera)
+  const intro = createIntro({
+    camera,
+    renderer,
+    rig: { ambient, windowDiffuse, skyDiffuse, direct, fill },
+    setDof: post.setDof,
+  })
+  const skipIntro = shouldSkipIntro()
+  if (skipIntro) {
+    intro.skip()
+    document.body.classList.add('ready')
+  } else {
+    controls.enabled = false
+    document.body.classList.add('filming')
+  }
 
   const clock = new THREE.Clock()
   let melt = 0
   let meltTarget = 0
   let meltedAway = false
-  let sequenceLock = false
+  let sequenceLock = !skipIntro
   let holding = false
   let downOnSubject = false
   let dragged = false
@@ -221,7 +236,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   canvas.addEventListener('pointerdown', (event) => {
     down.set(event.clientX, event.clientY)
     dragged = false
-    if (sequenceLock || isTouring(tour)) {
+    if (intro.shouldBlockInput() || sequenceLock || isTouring(tour)) {
       holding = false
       downOnSubject = false
       return
@@ -239,8 +254,9 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     }
   })
 
-  const startSplashTour = () => {
-    if (sequenceLock || isTouring(tour) || melt < SPLASH_HOLD * 0.72) return
+  const startSplashTour = (scripted = false) => {
+    if (isTouring(tour) || melt < SPLASH_HOLD * 0.72) return
+    if (!scripted && (intro.shouldBlockInput() || sequenceLock)) return
     anim.scrubbing = false
     sequenceLock = true
     puddle.getWorldPosition(puddleHome)
@@ -249,7 +265,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   }
 
   const endPointer = () => {
-    if (sequenceLock || isTouring(tour)) {
+    if (intro.shouldBlockInput() || sequenceLock || isTouring(tour)) {
       holding = false
       downOnSubject = false
       return
@@ -274,20 +290,37 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   })
 
   window.addEventListener('keydown', (event) => {
+    if (event.code === 'Escape' && intro.active) {
+      intro.skip()
+      resetTour(tour)
+      sequenceLock = false
+      meltedAway = false
+      melt = 0
+      meltTarget = 0
+      carrier.position.set(0, 0, 0)
+      uniforms.uTourOffset.value.set(0, 0, 0)
+      controls.target.copy(home.target)
+      camera.position.copy(home.position)
+      controls.enabled = true
+      document.body.classList.remove('filming')
+      document.body.classList.add('ready')
+      return
+    }
     if (event.code !== 'Space') return
     event.preventDefault()
-    if (sequenceLock || isTouring(tour)) return
+    if (intro.shouldBlockInput() || sequenceLock || isTouring(tour)) return
     anim.scrubbing = false
     meltedAway = true
     meltTarget = SPLASH_HOLD
     hideHint()
   })
   window.addEventListener('keyup', (event) => {
-    if (event.code !== 'Space' || sequenceLock || isTouring(tour)) return
+    if (event.code !== 'Space' || intro.shouldBlockInput() || sequenceLock || isTouring(tour)) return
     meltTarget = meltedAway ? SPLASH_HOLD : 0
   })
 
   reset?.addEventListener('click', () => {
+    intro.skip()
     camera.position.copy(home.position)
     controls.target.copy(home.target)
     anim.scrubbing = false
@@ -302,6 +335,8 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     melt = 0
     meltTarget = 0
     meltedAway = false
+    document.body.classList.remove('filming')
+    document.body.classList.add('ready')
   })
 
   const loadFile = async (file: File) => {
@@ -344,12 +379,13 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     const rawDt = clock.getDelta()
     const dt = tour.playing ? Math.min(rawDt, 1 / 24) : rawDt
     uniforms.uTime.value = clock.elapsedTime
-    if (holding && !sequenceLock && !isTouring(tour)) meltTarget = SPLASH_HOLD
+    if (holding && !intro.shouldBlockInput() && !sequenceLock && !isTouring(tour)) meltTarget = SPLASH_HOLD
     if (tour.playing && tickTour(tour, dt, camera) === 'done') {
       meltedAway = false
       meltTarget = 0
     }
-    if (sequenceLock && !tour.playing && meltTarget === 0 && melt < 0.008) {
+    const boxSolid = !tour.playing && !meltedAway && meltTarget === 0 && melt < 0.008
+    if (sequenceLock && boxSolid && !intro.active) {
       sequenceLock = false
       controls.enabled = true
     }
@@ -399,23 +435,51 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     puddle.position.z = THREE.MathUtils.lerp(0, -0.55, THREE.MathUtils.smoothstep(anim.drainStart, anim.drainEnd, shown))
     puddleMat.opacity = THREE.MathUtils.clamp(puddleIn * puddleOut * 0.9, 0, 0.9)
 
+    const splashReady = meltedAway && melt >= SPLASH_HOLD * 0.72 && !tour.playing
+    const cue = intro.tick(dt, { splashReady, boxSolid })
+    if (cue === 'melt') {
+      anim.scrubbing = false
+      meltedAway = true
+      meltTarget = SPLASH_HOLD
+      sequenceLock = true
+    }
+    if (cue === 'tour') startSplashTour(true)
+    if (cue === 'live') {
+      controls.target.copy(home.target)
+      camera.position.copy(home.position)
+      const yaw = new THREE.Vector3(0, 1, 0)
+      camera.position.sub(home.target).applyAxisAngle(yaw, 0.014).add(home.target)
+      camera.lookAt(home.target)
+      controls.enabled = true
+      sequenceLock = false
+      document.body.classList.remove('filming')
+      document.body.classList.add('ready')
+      hintGone = false
+      hintWrap?.classList.remove('is-hidden')
+      if (hint) hint.textContent = 'Drag to explore'
+    }
+
     canvas.dataset.phase = tour.playing ? tour.phase : meltedAway ? 'splash' : 'box'
-    canvas.dataset.lock = sequenceLock || isTouring(tour) ? '1' : '0'
+    canvas.dataset.lock = intro.shouldBlockInput() || sequenceLock || isTouring(tour) ? '1' : '0'
+    canvas.dataset.intro = intro.chapter
     canvas.dataset.ndc = `${tour.ndc.x.toFixed(2)},${tour.ndc.y.toFixed(2)}`
 
-    if (hint) {
-      if (tour.phase === 'falling') hint.textContent = ''
-      else if (isTouring(tour)) hint.textContent = ''
-      else if (sequenceLock) hint.textContent = ''
+    if (hint && intro.chapter !== 'live') {
+      hint.textContent = ''
+    } else if (hint && !hintGone) {
+      if (hint.textContent === 'Drag to explore') {
+        // keep the handoff line until the first drag
+      } else if (tour.phase === 'falling' || isTouring(tour) || sequenceLock) hint.textContent = ''
       else if (meltedAway && melt >= SPLASH_HOLD * 0.72) hint.textContent = 'Click the splash to send it around'
       else if (meltedAway) hint.textContent = ''
       else hint.textContent = melt > 0.12 ? 'Click to return' : 'Drag to turn · Click to unmake'
     }
 
-    controls.update()
+    if (!intro.active) controls.update()
     post.composer.render()
     requestAnimationFrame(loop)
   }
 
+  clock.getDelta()
   loop()
 }
