@@ -75,6 +75,8 @@ uniform float uGlyphSpeed;
 uniform float uScanSpeed;
 uniform float uScanBoost;
 uniform float uScanDensityBoost;
+uniform float uCharSpeed;
+uniform float uColorSpeed;
 uniform float uCameraNear;
 uniform float uCameraFar;
 uniform vec3 uCyan;
@@ -166,8 +168,8 @@ vec2 planeDir(vec3 n) {
 }
 vec3 planeInk(vec3 n, float edgeAmt, float h) {
   vec3 a = abs(n);
-  vec3 ink = a.x > a.y ? uRed : uCyan;
-  if (edgeAmt > 0.62 && h > 0.9) ink = uWhite;
+  vec3 ink = a.x > a.y ? uColorB : uColorA;
+  if (edgeAmt > 0.62 && h > 0.9) ink = uColorC;
   return ink;
 }
 vec3 technical(vec2 frag) {
