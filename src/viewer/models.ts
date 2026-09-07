@@ -4,6 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import { createAnimalPrintTexture } from '../textures/animalPrint'
 import { applyMeltMaterial, meltDepthMaterial, prepareMeltMesh, type MeltUniforms } from './melt'
+import { createDeskSurface, createWallSurface } from './surfaces'
 
 export const FLOOR = 0
 
@@ -215,20 +216,16 @@ export function createStandInBox(uniforms: MeltUniforms) {
 export const DESK_COLOR = '#e4dfd4'
 export const WALL_COLOR = '#b9b8b4'
 
-export function createGround() {
+export function createGround(grain = 0.04) {
   const geo = new THREE.PlaneGeometry(6, 6)
   geo.rotateX(-Math.PI / 2)
-  const mat = new THREE.MeshStandardMaterial({
-    color: DESK_COLOR,
-    roughness: 0.92,
-    metalness: 0,
-    envMapIntensity: 0,
-  })
-  const mesh = new THREE.Mesh(geo, mat)
+  const surface = createDeskSurface(DESK_COLOR, grain)
+  const mesh = new THREE.Mesh(geo, surface.material)
   mesh.name = 'desk'
   mesh.castShadow = false
   mesh.receiveShadow = true
   mesh.position.y = FLOOR
+  mesh.userData.surface = surface
   return mesh
 }
 
@@ -247,14 +244,15 @@ export function fitDesk(mesh: THREE.Mesh, object: THREE.Object3D, multiple = 5) 
   mesh.position.set(center.x, FLOOR, center.z)
 }
 
-export function createWall() {
+export function createWall(grain = 0.035, patch = 0.05) {
   const geo = new THREE.PlaneGeometry(48, 48)
-  const mat = new THREE.MeshBasicMaterial({ color: WALL_COLOR })
-  const mesh = new THREE.Mesh(geo, mat)
+  const surface = createWallSurface(WALL_COLOR, grain, patch)
+  const mesh = new THREE.Mesh(geo, surface.material)
   mesh.name = 'wall'
   mesh.castShadow = false
   mesh.receiveShadow = false
   mesh.position.set(0, 24, -4)
+  mesh.userData.surface = surface
   return mesh
 }
 
