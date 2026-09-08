@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 import { attachDebugMenu, DEFAULT_LIGHT, type LightLook } from './debug'
 import { createTechnicalLens } from './technicalLens'
+import { createAnalogCRT } from './analogCRT'
 import {
   createGround,
   findBundledScan,
@@ -97,6 +98,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   applyLook()
 
   const lens = createTechnicalLens(renderer)
+  const crt = createAnalogCRT(renderer)
   lens.setSubject(subject)
   const clock = new THREE.Clock()
 
@@ -127,7 +129,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     setSource(label)
   }
 
-  attachDebugMenu({ look, onLook: applyLook, lens: lens.params })
+  attachDebugMenu({ look, onLook: applyLook, lens: lens.params, crt: crt.params })
 
   const hideHint = () => hintWrap?.classList.add('is-hidden')
 
@@ -190,6 +192,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     camera.updateProjectionMatrix()
     renderer.setSize(w, h)
     lens.resize()
+    crt.resize()
   })
 
   const loop = () => {
@@ -197,7 +200,8 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     controls.update()
     canvas.dataset.pointer = `${pointerNDC.x.toFixed(3)},${pointerNDC.y.toFixed(3)}`
     canvas.dataset.pointerPx = `${pointerPixels.x.toFixed(0)},${pointerPixels.y.toFixed(0)}`
-    lens.render(scene, camera, clock.getElapsedTime())
+    const elapsed = clock.getElapsedTime()
+    crt.render(() => lens.render(scene, camera, elapsed), elapsed)
   }
   loop()
   document.body.classList.add('ready')

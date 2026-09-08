@@ -1,5 +1,6 @@
 import GUI from 'lil-gui'
 import { DEFAULT_LENS, type LensParams } from './technicalLens'
+import { DEFAULT_CRT, type CRTParams } from './analogCRT'
 
 export type LightLook = {
   exposure: number
@@ -33,6 +34,7 @@ type DebugOptions = {
   look: LightLook
   onLook?: () => void
   lens?: LensParams
+  crt?: CRTParams
 }
 
 export function attachDebugMenu(options: DebugOptions) {
@@ -40,7 +42,7 @@ export function attachDebugMenu(options: DebugOptions) {
   const embed = document.body.classList.contains('embed')
   if (embed && params.get('debug') !== '1') return null
 
-  const { look, onLook, lens } = options
+  const { look, onLook, lens, crt } = options
   const gui = new GUI({ title: 'Look' })
   gui.domElement.classList.add('debug-gui')
   gui.domElement.style.right = '12px'
@@ -83,11 +85,18 @@ export function attachDebugMenu(options: DebugOptions) {
     points.add(lens, 'surfaceRoughness', 0.12, 0.7, 0.01).name('surface roughness')
     points.open()
 
-    const motion = folder.addFolder('Row motion')
-    motion.add(lens, 'movingRowDensity', 0, 1, 0.01).name('moving row density')
-    motion.add(lens, 'rowSpeed', 0, 2, 0.01).name('row speed')
-    motion.add(lens, 'rowTravel', 0, 3, 0.05).name('travel · cell heights')
+    const motion = folder.addFolder('Row flow')
+    motion.add(lens, 'rowFlowEnabled').name('enabled')
+    motion.add(lens, 'rowSpeed', 0, 20, 0.1).name('rows per second')
+    motion.add(lens, 'rowDirection', { Down: 1, Up: -1 }).name('direction')
     motion.open()
+
+    const symbols = folder.addFolder('Symbols')
+    symbols.add(lens, 'symbols').name('characters')
+    symbols.add(lens, 'symbolDensity', 0, 1, 0.01).name('symbol density')
+    symbols.add(lens, 'symbolSize', 0.4, 1, 0.01).name('symbol size')
+    symbols.add(lens, 'symbolChangeSpeed', 0, 3, 0.1).name('change speed')
+    symbols.open()
 
     const glitch = folder.addFolder('Glitch')
     glitch.add(lens, 'glitchAmount', 0, 1, 0.01).name('glitch amount')
@@ -111,11 +120,6 @@ export function attachDebugMenu(options: DebugOptions) {
     mix.add(lens, 'effectIntensity', 0.2, 2.5, 0.01).name('effect intensity')
     mix.add(lens, 'borderOpacity', 0, 1, 0.01).name('border opacity')
 
-    const bloom = folder.addFolder('Bloom')
-    bloom.add(lens, 'bloomStrength', 0, 1, 0.01).name('strength')
-    bloom.add(lens, 'bloomRadius', 1, 14, 0.5).name('radius')
-    bloom.add(lens, 'bloomThreshold', 0.2, 0.95, 0.01).name('threshold')
-    bloom.add(lens, 'grainStrength', 0, 0.15, 0.005).name('film grain')
 
     folder.add(
       {
@@ -129,5 +133,30 @@ export function attachDebugMenu(options: DebugOptions) {
     folder.open()
   }
 
+  if (crt) {
+    const folder = gui.addFolder('Analog CRT · final frame')
+    folder.add(crt, 'enabled')
+    folder.add(crt, 'strength', 0, 1, 0.01)
+    folder.add(crt, 'lineSpacing', 1.5, 8, 0.1).name('vertical line spacing')
+    folder.add(crt, 'lineStrength', 0, 0.8, 0.01).name('line contrast')
+    folder.add(crt, 'lineIrregularity', 0, 1, 0.01).name('line irregularity')
+    folder.add(crt, 'calmDisplacement', 0, 3, 0.05).name('calm shift · px')
+    folder.add(crt, 'largeDisplacement', 0, 100, 1).name('large bends · px')
+    folder.add(crt, 'mediumDisplacement', 0, 50, 0.5).name('medium bends · px')
+    folder.add(crt, 'jitter', 0, 4, 0.05).name('fine jitter · px')
+    folder.add(crt, 'rowStep', 1, 16, 1).name('terrace height · px')
+    folder.add(crt, 'tearStrength', 0, 150, 1).name('tracking tear · px')
+    folder.add(crt, 'tearWidth', 0.005, 0.2, 0.005).name('tear height')
+    folder.add(crt, 'rgbSeparation', 0, 8, 0.1).name('RGB separation · px')
+    folder.add(crt, 'burstRate', 0, 2, 0.05).name('bursts per second')
+    folder.add(crt, 'burstDuration', 0.05, 0.6, 0.01).name('burst duration · s')
+    folder.add(crt, 'settleTime', 0.05, 1, 0.01).name('settle time · s')
+    folder.add(crt, 'amplitudeVariation', 0, 0.3, 0.01).name('brightness variation')
+    folder.add({ reset: () => {
+      Object.assign(crt, DEFAULT_CRT)
+      folder.controllersRecursive().forEach(control => control.updateDisplay())
+    } }, 'reset').name('Reset analog CRT')
+    folder.open()
+  }
   return gui
 }

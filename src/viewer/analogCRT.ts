@@ -1,0 +1,180 @@
+import * as THREE from 'three'
+import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js'
+
+export const DEFAULT_CRT = {
+  enabled: true, strength: 0.65, lineSpacing: 2.4, lineStrength: 0.2,
+  lineIrregularity: 0.25, calmDisplacement: 0.35, largeDisplacement: 24,
+  mediumDisplacement: 9, jitter: 0.7, rowStep: 3, tearStrength: 36,
+  tearWidth: 0.035, rgbSeparation: 2, burstRate: 0.3,
+  burstDuration: 0.3, settleTime: 0.3, amplitudeVariation: 0.08,
+}
+export type CRTParams = typeof DEFAULT_CRT
+
+// Frame-rate independent event arrivals, with an attack, held state, and decay.
+export function createSignalClock(random = Math.random) {
+  let previousTime: number | undefined
+  let start = -1e6
+  let hold = 0.2
+  let release = 0.3
+  let seed = 1
+  return (time: number, params: CRTParams, reducedMotion = false) => {
+    const dt = previousTime === undefined ? 0 : Math.max(0, Math.min(time - previousTime, 0.1))
+    previousTime = time
+    if (reducedMotion) { start = -1e6; return { envelope: 0, seed } }
+    if (time - start > hold + release && random() < 1 - Math.exp(-params.burstRate * dt)) {
+      start = time
+      hold = params.burstDuration * (0.65 + random() * 0.7)
+      release = params.settleTime
+      seed = 1 + random() * 999
+    }
+    const age = time - start
+    const attack = Math.min(age / 0.025, 1)
+    const tail = Math.max(0, 1 - Math.max(age - hold, 0) / Math.max(release, 0.001))
+    return { envelope: Math.max(0, attack * tail * tail * (3 - 2 * tail)), seed }
+  }
+}
+
+const VERTEX = /* glsl */ `
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`
+
+const FRAGMENT = /* glsl */ `
+uniform sampler2D tFrame;
+uniform vec2 uResolution;
+uniform float uPixelRatio;
+uniform float uTime;
+uniform float uBurst;
+uniform float uSeed;
+uniform float uStrength;
+uniform float uLineSpacing;
+uniform float uLineStrength;
+uniform float uLineIrregularity;
+uniform float uCalmDisplacement;
+uniform float uLargeDisplacement;
+uniform float uMediumDisplacement;
+uniform float uJitter;
+uniform float uRowStep;
+uniform float uTearStrength;
+uniform float uTearWidth;
+uniform float uRgbSeparation;
+uniform float uAmplitudeVariation;
+varying vec2 vUv;
+
+float crtHash(float p) { return fract(sin(p * 127.1 + 311.7) * 43758.5453); }
+float crtNoise(float p) {
+  float i = floor(p), f = fract(p);
+  return mix(crtHash(i), crtHash(i + 1.0), f * f * (3.0 - 2.0 * f));
+}
+float crtZone(float y, float center, float width) {
+  return 1.0 - smoothstep(width * 0.35, width, abs(y - center));
+}
+
+vec3 crtRead(float x, float y) {
+  // Black border, never repeat or clamp edge pixels into a long smear.
+  if (x < 0.0 || x > 1.0) return vec3(0.0);
+  vec3 color = texture2D(tFrame, vec2(x, y)).rgb;
+  float position = x * uResolution.x / max(uLineSpacing * uPixelRatio, 1.0);
+  float irregular = (crtNoise(position * 0.09) - 0.5) * uLineIrregularity;
+  float phase = fract(position + irregular);
+  float aa = min(0.24, 0.6 / max(uLineSpacing * uPixelRatio, 1.0));
+  float line = 1.0 - smoothstep(0.08, 0.08 + aa, abs(phase - 0.5));
+  float variation = mix(1.0, 0.7 + crtHash(floor(position)) * 0.3, uLineIrregularity);
+  // Multiplication preserves genuinely black source pixels.
+  return color * (1.0 - line * uLineStrength * variation * uStrength);
+}
+
+void main() {
+  float y = vUv.y;
+  float heldTime = floor(uTime * 5.0);
+  float steppedY = floor(y * uResolution.y / max(uRowStep * uPixelRatio, 1.0))
+    * max(uRowStep * uPixelRatio, 1.0) / uResolution.y;
+  float bandY = mix(y, steppedY, 0.8);
+  float zoneCenter = 0.15 + crtHash(uSeed + 2.0) * 0.7;
+  float zone = crtZone(y, zoneCenter, 0.12 + crtHash(uSeed + 9.0) * 0.22);
+  float large = (crtNoise(bandY * 4.1 + uTime * 0.09 + uSeed) - 0.5) * 2.0;
+  float medium = (crtNoise(bandY * 23.0 + uSeed * 3.0 + floor(uTime * 2.0) * 0.11) - 0.5) * 2.0;
+  float fine = (crtNoise(steppedY * uResolution.y * 0.7 + heldTime * 17.0) - 0.5) * 2.0;
+  float tearCenter = 0.08 + 0.84 * fract(crtHash(uSeed + 21.0) + uTime * 0.015);
+  float tear = crtZone(y, tearCenter, uTearWidth);
+  float tearDirection = crtHash(uSeed + 34.0) < 0.5 ? -1.0 : 1.0;
+  float activity = uBurst * zone;
+  float displacement = large * uCalmDisplacement * zone
+    + activity * (large * uLargeDisplacement + medium * uMediumDisplacement)
+    + fine * uJitter * (0.06 + activity)
+    + tear * tearDirection * uTearStrength * uBurst;
+  float shift = displacement * uStrength * uPixelRatio / uResolution.x;
+  float split = uRgbSeparation * uStrength * uPixelRatio / uResolution.x
+    * clamp(activity * 0.5 + abs(displacement) / 30.0 + tear * uBurst, 0.0, 1.5);
+  float x = vUv.x + shift;
+  // All samples keep exactly the same Y. The vertical line carrier is
+  // evaluated at displaced source X, so the lines bend with the picture.
+  vec3 color = vec3(crtRead(x + split, y).r, crtRead(x, y).g, crtRead(x - split, y).b);
+  float amplitude = 1.0 - uAmplitudeVariation * activity * crtNoise(bandY * 61.0 + uSeed);
+  gl_FragColor = vec4(color * amplitude, 1.0);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}
+`
+
+export function createAnalogCRT(renderer: THREE.WebGLRenderer) {
+  const params: CRTParams = { ...DEFAULT_CRT }
+  const size = renderer.getDrawingBufferSize(new THREE.Vector2())
+  const target = new THREE.WebGLRenderTarget(size.x, size.y, {
+    type: THREE.UnsignedByteType, colorSpace: THREE.LinearSRGBColorSpace,
+    minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
+    samples: 0, depthBuffer: true,
+  })
+  target.texture.name = 'AnalogCRT.finalFrame'
+  const uniforms: Record<string, THREE.IUniform> = {
+    tFrame: { value: target.texture }, uResolution: { value: size },
+    uPixelRatio: { value: renderer.getPixelRatio() },
+    uTime: { value: 0 }, uBurst: { value: 0 }, uSeed: { value: 1 },
+  }
+  const controls = ['strength', 'lineSpacing', 'lineStrength', 'lineIrregularity', 'calmDisplacement',
+    'largeDisplacement', 'mediumDisplacement', 'jitter', 'rowStep', 'tearStrength', 'tearWidth',
+    'rgbSeparation', 'amplitudeVariation'] as const
+  for (const key of controls) uniforms['u' + key[0].toUpperCase() + key.slice(1)] = { value: params[key] }
+  const material = new THREE.ShaderMaterial({
+    name: 'Analog horizontal sync failure', uniforms, vertexShader: VERTEX, fragmentShader: FRAGMENT,
+    depthTest: false, depthWrite: false,
+  })
+  const quad = new FullScreenQuad(material)
+  const signal = createSignalClock()
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
+  const resize = () => {
+    renderer.getDrawingBufferSize(size)
+    target.setSize(Math.max(1, size.x), Math.max(1, size.y))
+    uniforms.uPixelRatio.value = renderer.getPixelRatio()
+  }
+  const render = (drawFrame: () => void, elapsed: number) => {
+    const state = signal(elapsed, params, reducedMotion.matches)
+    if (!params.enabled) { drawFrame(); return }
+    uniforms.uTime.value = reducedMotion.matches ? 0 : elapsed
+    uniforms.uBurst.value = state.envelope
+    uniforms.uSeed.value = state.seed
+    for (const key of controls) uniforms['u' + key[0].toUpperCase() + key.slice(1)].value = params[key]
+    const previousTarget = renderer.getRenderTarget()
+    const autoClear = renderer.autoClear
+    const scissor = renderer.getScissor(new THREE.Vector4())
+    const scissorTest = renderer.getScissorTest()
+    try {
+      renderer.setRenderTarget(target)
+      renderer.setScissorTest(false)
+      renderer.autoClear = true
+      drawFrame()
+      renderer.setRenderTarget(previousTarget)
+      renderer.setScissorTest(false)
+      quad.render(renderer)
+    } finally {
+      renderer.setRenderTarget(previousTarget)
+      renderer.autoClear = autoClear
+      renderer.setScissor(scissor)
+      renderer.setScissorTest(scissorTest)
+    }
+  }
+  return { params, resize, render, dispose: () => { target.dispose(); material.dispose(); quad.dispose() } }
+}
