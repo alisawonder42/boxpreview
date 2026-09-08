@@ -23,6 +23,9 @@ export type LensParams = {
   borderOpacity: number
   surfaceRoughness: number
   animSpeed: number
+  bloomStrength: number
+  bloomRadius: number
+  bloomThreshold: number
 }
 
 export const DEFAULT_LENS: LensParams = {
@@ -47,6 +50,9 @@ export const DEFAULT_LENS: LensParams = {
   borderOpacity: 0.42,
   surfaceRoughness: 0.34,
   animSpeed: 0.75,
+  bloomStrength: 0.32,
+  bloomRadius: 5,
+  bloomThreshold: 0.62,
 }
 
 const VERTEX = /* glsl */ `
@@ -94,8 +100,12 @@ float hash21(vec2 p) {
 
 // Three.js injects luminance(vec3) into ShaderMaterial's fragment prefix.
 // Keep our helper namespaced to avoid a duplicate GLSL function definition.
-float scanLuminance(vec3 color) {
-  return dot(color, vec3(0.2126, 0.7152, 0.0722));
+float scanSurfaceLight(vec4 surface) {
+  vec3 n = normalize(surface.rgb * 2.0 - 1.0);
+  float key = max(dot(n, normalize(vec3(-0.55, 0.65, 0.75))), 0.0);
+  float fill = max(dot(n, normalize(vec3(0.7, -0.1, 0.5))), 0.0);
+  float rim = pow(1.0 - abs(n.z), 2.0);
+  return (0.08 + key * 0.55 + fill * 0.16 + rim * 0.22) * surface.a;
 }
 
 vec3 scanPalette(float value) {
@@ -115,6 +125,10 @@ void main() {
   vec2 lensDelta = abs(pixel - uPointer);
   float squareDistance = max(lensDelta.x, lensDelta.y);
   float inside = (1.0 - smoothstep(halfLens - 0.8, halfLens + 0.8, squareDistance)) * uActive;
+  if (squareDistance > halfLens + 2.0) {
+    gl_FragColor = vec4(sceneColor, 1.0);
+    return;
+  }
 
   float cellSize = max(uCellSize, 2.0);
   vec2 cellId = floor(pixel / cellSize);
@@ -134,14 +148,14 @@ void main() {
   vec2 shiftedUv = clamp(cellUv + vec2(shiftPx / uResolution.x, 0.0), vec2(0.001), vec2(0.999));
 
   vec4 subjectSample = texture2D(tSubject, shiftedUv);
-  float baseLum = scanLuminance(subjectSample.rgb);
+  float baseLum = scanSurfaceLight(subjectSample);
 
   vec2 texel = 1.0 / uResolution;
-  float lumL = scanLuminance(texture2D(tSubject, clamp(cellUv - vec2(texel.x * 2.0, 0.0), vec2(0.001), vec2(0.999))).rgb);
-  float lumR = scanLuminance(texture2D(tSubject, clamp(cellUv + vec2(texel.x * 2.0, 0.0), vec2(0.001), vec2(0.999))).rgb);
-  float lumD = scanLuminance(texture2D(tSubject, clamp(cellUv - vec2(0.0, texel.y * 2.0), vec2(0.001), vec2(0.999))).rgb);
-  float lumU = scanLuminance(texture2D(tSubject, clamp(cellUv + vec2(0.0, texel.y * 2.0), vec2(0.001), vec2(0.999))).rgb);
-  float detailEdge = clamp((abs(lumR - lumL) + abs(lumU - lumD)) * 3.2 * uEdgeBoost, 0.0, 1.0);
+  vec4 normalL = texture2D(tSubject, vUv - vec2(texel.x * 2.0, 0.0));
+  vec4 normalR = texture2D(tSubject, vUv + vec2(texel.x * 2.0, 0.0));
+  vec4 normalD = texture2D(tSubject, vUv - vec2(0.0, texel.y * 2.0));
+  vec4 normalU = texture2D(tSubject, vUv + vec2(0.0, texel.y * 2.0));
+  float detailEdge = clamp((length(normalR - normalL) + length(normalU - normalD)) * 2.4 * uEdgeBoost, 0.0, 1.0);
 
   float contrast = mix(1.22, 1.55, 1.0 - clamp(uSurfaceRoughness, 0.0, 1.0));
   float shapedLum = clamp(baseLum * contrast + detailEdge * 0.34, 0.0, 1.0);
@@ -170,7 +184,11 @@ void main() {
 
   float effectMask = inside * subjectMask;
 
-  vec3 scanBase = mix(sceneColor, uShadowGreen * (0.10 + shapedLum * 0.16), clamp(uBaseDarken, 0.0, 1.0));
+  // A continuous relief layer keeps fine creases visible between scan points.
+  // No albedo contribution: printed colors cannot become fake surface detail.
+  float surfaceLight = scanSurfaceLight(subjectHere);
+  vec3 scanBase = scanPalette(surfaceLight) * (0.16 + surfaceLight * 0.3)
+    * (1.0 - clamp(uBaseDarken, 0.0, 1.0) * 0.8);
   float luminous = pointShape * keepPoint * subjectMask;
   scanBase += pointColor * luminous * uEffectIntensity;
 
@@ -195,6 +213,42 @@ void main() {
 }
 `
 
+const BLOOM_FRAGMENT = /* glsl */ `
+uniform sampler2D tEffect;
+uniform sampler2D tSubject;
+uniform vec2 uResolution;
+uniform vec2 uPointer;
+uniform float uLensSize;
+uniform float uBloomStrength;
+uniform float uBloomRadius;
+uniform float uBloomThreshold;
+varying vec2 vUv;
+
+vec3 scanBright(vec2 uv) {
+  vec2 delta = abs(uv * uResolution - uPointer);
+  float windowMask = 1.0 - smoothstep(uLensSize * 0.5 - 1.0, uLensSize * 0.5, max(delta.x, delta.y));
+  vec3 color = texture2D(tEffect, uv).rgb;
+  float brightness = max(color.r, max(color.g, color.b));
+  return color * smoothstep(uBloomThreshold, 1.0, brightness)
+    * texture2D(tSubject, uv).a * windowMask;
+}
+
+void main() {
+  vec3 glow = scanBright(vUv) * 0.2;
+  for (int i = 0; i < 8; i++) {
+    float angle = float(i) * 0.785398163;
+    vec2 offset = vec2(cos(angle), sin(angle)) * uBloomRadius / uResolution;
+    glow += scanBright(vUv + offset * 0.45) * 0.065;
+    glow += scanBright(vUv + offset) * 0.035;
+  }
+  vec2 delta = abs(gl_FragCoord.xy - uPointer);
+  float windowMask = 1.0 - smoothstep(uLensSize * 0.5 - 1.0, uLensSize * 0.5, max(delta.x, delta.y));
+  gl_FragColor = vec4(texture2D(tEffect, vUv).rgb + glow * uBloomStrength * windowMask, 1.0);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}
+`
+
 export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
   const params: LensParams = { ...DEFAULT_LENS }
   const size = renderer.getDrawingBufferSize(new THREE.Vector2())
@@ -214,11 +268,14 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
 
   const sceneTarget = makeTarget()
   const subjectTarget = makeTarget()
+  const effectTarget = makeTarget()
   sceneTarget.texture.name = 'ScanLens.scene'
   subjectTarget.texture.name = 'ScanLens.subject'
+  effectTarget.texture.name = 'ScanLens.effect'
 
   const pointerCss = new THREE.Vector2(-1, -1)
   const subjectMeshes = new Set<THREE.Mesh>()
+  const normalMaterials = new Map<THREE.Material, THREE.MeshNormalMaterial>()
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
   let pointerActive = false
 
@@ -248,6 +305,10 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     uEffectIntensity: { value: params.effectIntensity },
     uBorderOpacity: { value: params.borderOpacity },
     uSurfaceRoughness: { value: params.surfaceRoughness },
+    tEffect: { value: effectTarget.texture },
+    uBloomStrength: { value: params.bloomStrength },
+    uBloomRadius: { value: params.bloomRadius },
+    uBloomThreshold: { value: params.bloomThreshold },
   }
 
   const compositeMaterial = new THREE.ShaderMaterial({
@@ -259,6 +320,11 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     depthWrite: false,
   })
   const quad = new FullScreenQuad(compositeMaterial)
+  const bloomMaterial = new THREE.ShaderMaterial({
+    name: 'Scan lens soft bloom', uniforms, vertexShader: VERTEX,
+    fragmentShader: BLOOM_FRAGMENT, depthTest: false, depthWrite: false,
+  })
+  const bloomQuad = new FullScreenQuad(bloomMaterial)
 
   const syncSize = () => {
     renderer.getDrawingBufferSize(size)
@@ -270,6 +336,7 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     uniforms.uCellSize.value = params.cellSize * sx
     uniforms.uPointSize.value = params.pointSize * sx
     uniforms.uGlitchShift.value = params.glitchShift * sx
+    uniforms.uBloomRadius.value = params.bloomRadius * sx
     uniforms.uPointer.value.set(pointerCss.x * sx, (rect.height - pointerCss.y) * sy)
   }
 
@@ -279,6 +346,7 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     const height = Math.max(1, Math.floor(size.y))
     sceneTarget.setSize(width, height)
     subjectTarget.setSize(width, height)
+    effectTarget.setSize(width, height)
   }
 
   const setPointer = (x: number, y: number) => {
@@ -292,10 +360,33 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
   }
 
   const setSubject = (subject: THREE.Object3D) => {
+    for (const material of normalMaterials.values()) material.dispose()
+    normalMaterials.clear()
     subjectMeshes.clear()
     subject.traverse((object) => {
       if (object instanceof THREE.Mesh) subjectMeshes.add(object)
     })
+  }
+
+  const surfaceMaterial = (source: THREE.Material) => {
+    let material = normalMaterials.get(source)
+    if (material) return material
+    const detail = source as THREE.MeshStandardMaterial
+    material = new THREE.MeshNormalMaterial({
+      side: source.side,
+      normalMap: detail.normalMap ?? null,
+      normalMapType: detail.normalMapType ?? THREE.TangentSpaceNormalMap,
+      normalScale: detail.normalScale?.clone() ?? new THREE.Vector2(1, 1),
+      bumpMap: detail.bumpMap ?? null,
+      bumpScale: detail.bumpScale ?? 1,
+      displacementMap: detail.displacementMap ?? null,
+      displacementScale: detail.displacementScale ?? 1,
+      displacementBias: detail.displacementBias ?? 0,
+      flatShading: detail.flatShading ?? false,
+      toneMapped: false,
+    })
+    normalMaterials.set(source, material)
+    return material
   }
 
   const syncUniforms = (elapsed: number) => {
@@ -316,6 +407,8 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     uniforms.uEffectIntensity.value = params.effectIntensity
     uniforms.uBorderOpacity.value = params.borderOpacity
     uniforms.uSurfaceRoughness.value = params.surfaceRoughness
+    uniforms.uBloomStrength.value = params.bloomStrength
+    uniforms.uBloomThreshold.value = params.bloomThreshold
     syncSize()
   }
 
@@ -338,6 +431,7 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     const previousClearColor = renderer.getClearColor(new THREE.Color()).clone()
     const previousClearAlpha = renderer.getClearAlpha()
     const hiddenMeshes: Array<[THREE.Mesh, boolean]> = []
+    const originalMaterials: Array<[THREE.Mesh, THREE.Material | THREE.Material[]]> = []
 
     try {
       renderer.autoClear = true
@@ -354,11 +448,19 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
       })
 
       scene.background = null
+      for (const mesh of subjectMeshes) {
+        originalMaterials.push([mesh, mesh.material])
+        mesh.material = Array.isArray(mesh.material)
+          ? mesh.material.map(surfaceMaterial) : surfaceMaterial(mesh.material)
+      }
       renderer.setClearColor(0x000000, 0)
       renderer.setRenderTarget(subjectTarget)
       renderer.clear(true, true, true)
       renderer.render(scene, camera)
+      renderer.setRenderTarget(effectTarget)
+      quad.render(renderer)
     } finally {
+      for (const [mesh, material] of originalMaterials) mesh.material = material
       for (const [mesh, visible] of hiddenMeshes) mesh.visible = visible
       scene.background = previousBackground
       renderer.shadowMap.autoUpdate = previousShadowAutoUpdate
@@ -386,7 +488,7 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
       renderer.setScissor(left / pixelRatio, bottom / pixelRatio,
         (right - left) / pixelRatio, (top - bottom) / pixelRatio)
       renderer.setScissorTest(true)
-      quad.render(renderer)
+      bloomQuad.render(renderer)
     } finally {
       renderer.autoClear = previousAutoClear
       renderer.setScissor(previousScissor)
@@ -397,8 +499,13 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
   const dispose = () => {
     sceneTarget.dispose()
     subjectTarget.dispose()
+    effectTarget.dispose()
+    for (const material of normalMaterials.values()) material.dispose()
+    normalMaterials.clear()
     compositeMaterial.dispose()
     quad.dispose()
+    bloomMaterial.dispose()
+    bloomQuad.dispose()
   }
 
   resize()

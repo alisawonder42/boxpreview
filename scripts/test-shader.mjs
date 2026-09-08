@@ -9,7 +9,7 @@ import { ACESFilmicToneMapping, SRGBColorSpace } from 'three'
 
 const source = readFileSync(new URL('../src/viewer/technicalLens.ts', import.meta.url), 'utf8')
 const vertexShader = source.match(/const VERTEX =[^`]*`([\s\S]*?)`/)[1]
-const fragmentShader = source.match(/const FRAGMENT =[^`]*`([\s\S]*?)`/)[1]
+const fragments = [...source.matchAll(/const (?:BLOOM_)?FRAGMENT =[^`]*`([\s\S]*?)`/g)].map(match => match[1])
 const directory = mkdtempSync(join(tmpdir(), 'box-lens-glsl-'))
 const gl = {
   VERTEX_SHADER: 'vert', FRAGMENT_SHADER: 'frag',
@@ -19,16 +19,18 @@ const gl = {
 }
 
 try {
-  new WebGLProgram({ getContext: () => gl }, 'shader-test', {
-    vertexShader, fragmentShader, defines: {}, precision: 'highp',
-    shaderType: 'ShaderMaterial', shaderName: 'ScanLens',
-    toneMapping: ACESFilmicToneMapping, outputColorSpace: SRGBColorSpace,
-    rendererExtensionParallelShaderCompile: false,
-  }, {})
-  execFileSync(process.argv[2] || 'glslangValidator', [
-    '-l', join(directory, 'lens.vert'), join(directory, 'lens.frag'),
-  ], { stdio: 'inherit' })
-  console.log('Three.js-generated lens shaders compile and link successfully.')
+  for (const fragmentShader of fragments) {
+    new WebGLProgram({ getContext: () => gl }, 'shader-test', {
+      vertexShader, fragmentShader, defines: {}, precision: 'highp',
+      shaderType: 'ShaderMaterial', shaderName: 'ScanLens',
+      toneMapping: ACESFilmicToneMapping, outputColorSpace: SRGBColorSpace,
+      rendererExtensionParallelShaderCompile: false,
+    }, {})
+    execFileSync(process.argv[2] || 'glslangValidator', [
+      '-l', join(directory, 'lens.vert'), join(directory, 'lens.frag'),
+    ], { stdio: 'inherit' })
+  }
+  console.log('Three.js-generated lens and bloom shaders compile and link successfully.')
 } finally {
   rmSync(directory, { recursive: true, force: true })
 }
