@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process'
 import { WebGLProgram } from 'three/src/renderers/webgl/WebGLProgram.js'
 import { ACESFilmicToneMapping, SRGBColorSpace } from 'three'
 
-const sources = ['technicalLens.ts', 'analogCRT.ts'].map(file => readFileSync(new URL('../src/viewer/' + file, import.meta.url), 'utf8'))
+const sources = ['technicalLens.ts', 'analogCRT.ts', 'boxCorruption.ts'].map(file => readFileSync(new URL('../src/viewer/' + file, import.meta.url), 'utf8'))
 const directory = mkdtempSync(join(tmpdir(), 'box-lens-glsl-'))
 const gl = {
   VERTEX_SHADER: 'vert', FRAGMENT_SHADER: 'frag',
@@ -32,7 +32,7 @@ try {
     ], { stdio: 'inherit' })
   }
   }
-  console.log('Three.js-generated scan, symbol, and analog CRT shaders compile and link successfully.')
+  console.log('Three.js-generated scan, symbol, analog CRT, and rigid box shaders compile and link successfully.')
 } finally {
   rmSync(directory, { recursive: true, force: true })
 }

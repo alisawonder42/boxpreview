@@ -44,6 +44,7 @@ function setup(pixelRatio = 1) {
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(), new THREE.MeshBasicMaterial())
   scene.add(subject, floor)
   const lens = createTechnicalLens(renderer)
+  lens.params.enabled = true // Explicitly opt into the archived effect for its regression tests.
   lens.setSubject(subject)
   return { renderer, lens, scene, floor, calls }
 }

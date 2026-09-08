@@ -40,7 +40,7 @@ export type LensParams = {
 }
 
 export const DEFAULT_LENS: LensParams = {
-  enabled: true,
+  enabled: false,
   lensSize: 300,
   cellSize: 4.4,
   pointSize: 1.4,
