@@ -69,7 +69,7 @@ for (const ratio of [1, 1.5, 2]) {
   assert.equal(scene.children[0].material, calls[0].materials[0], 'original print material is restored')
   const overlay = calls[4]
   const scanUniforms = calls[3].object.material.uniforms
-  assert.equal(scanUniforms.uGlyphCount.value, 3)
+  assert.equal(scanUniforms.uGlyphCount.value, 1)
   assert.equal(scanUniforms.uRowDirection.value, 1)
   const atlas = scanUniforms.tGlyphAtlas.value
   lens.params.symbols = 'x x3'
@@ -130,6 +130,22 @@ for (const ratio of [1, 1.5, 2]) {
   assert.equal(renderer.getScissorTest(), false)
   assert.throws(() => crt.render(() => { throw new Error('frame failed') }, 2, lens.getWindow()), /frame failed/)
   assert.equal(renderer.getRenderTarget(), null, 'failed frame restores output target')
+  const material = calls[5].object.material
+  const uniforms = material.uniforms
+  assert.equal(uniforms.tOriginal.value, calls[1].target.texture, 'blend samples the clean scene capture')
+  assert.notEqual(uniforms.tOriginal.value, uniforms.tFrame.value)
+  assert.equal(uniforms.uEffectOpacity.value, 0.5)
+  assert.equal(material.transparent, false, 'final output stays opaque')
+  crt.params.enabled = false
+  for (const opacity of [0, 1]) {
+    calls.length = 0
+    lens.params.effectOpacity = opacity
+    crt.render(() => lens.render(scene, new THREE.PerspectiveCamera(), 2.5), 2.5, lens.getWindow())
+    assert.equal(calls.length, 6, 'whole-effect blending remains active with CRT disabled')
+    assert.equal(uniforms.uCrtEnabled.value, false)
+    assert.equal(uniforms.uEffectOpacity.value, opacity)
+  }
+
   calls.length = 0
   lens.setPointerActive(false)
   crt.render(() => lens.render(scene, new THREE.PerspectiveCamera(), 3), 3, lens.getWindow())

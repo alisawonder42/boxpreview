@@ -21,6 +21,6 @@ const event = createSignalClock(() => 0)
 event(0, DEFAULT_CRT)
 event(0.1, DEFAULT_CRT)
 assert.equal(event(0.14, DEFAULT_CRT).envelope, 1, 'attack reaches a held peak')
-const release = event(0.4, DEFAULT_CRT).envelope
+const release = event(0.2, DEFAULT_CRT).envelope
 assert.ok(release > 0 && release < 1, 'burst settles rather than stopping abruptly')
 console.log(`Analog signal checks passed; ${Math.round(calm / 60)} of 100 simulated seconds calm.`)

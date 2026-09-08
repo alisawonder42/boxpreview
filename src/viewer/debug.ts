@@ -117,6 +117,7 @@ export function attachDebugMenu(options: DebugOptions) {
 
     const mix = folder.addFolder('Window')
     mix.add(lens, 'baseDarken', 0, 1, 0.01).name('base darken')
+    mix.add(lens, 'effectOpacity', 0, 1, 0.01).name('effect opacity')
     mix.add(lens, 'effectIntensity', 0.2, 2.5, 0.01).name('effect intensity')
     mix.add(lens, 'borderOpacity', 0, 1, 0.01).name('border opacity')
 
