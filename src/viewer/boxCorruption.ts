@@ -2,7 +2,8 @@ import * as THREE from 'three'
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js'
 
 export const DEFAULT_CORRUPTION = {
-  enabled: true, squareSize: 300, colorStrength: 0.8, colorDensity: 0.45, scanlineStrength: 0.16, bandCoverage: 0.22,
+  enabled: true, squareSize: 300, colorStrength: 0.72, colorDensity: 0.38,
+  scanlineStrength: 0.22, scannerSweepStrength: 0.18, scannerSpeed: 0.35, bandCoverage: 0.22,
   bandOffsetStrength: 12, tearAmount: 0.3, rgbSplitAmount: 0.65,
   noiseAmount: 0, blendAmount: 0.7, animationSpeed: 1,
 }
@@ -31,6 +32,8 @@ uniform float uColorDensity;
 uniform float uPixelRatio;
 uniform float uTime;
 uniform float uScanlineStrength;
+uniform float uScannerSweepStrength;
+uniform float uScannerSpeed;
 uniform float uBandCoverage;
 uniform float uBandOffsetStrength;
 uniform float uTearAmount;
@@ -106,7 +109,6 @@ void main() {
   float distance = abs(localY - center);
   float band = 1.0 - smoothstep(uBandCoverage * 0.43, uBandCoverage * 0.5, distance);
   float activity = band * pulse;
-  if (activity < 0.001) discard;
   vec3 original = texture2D(tScene, vUv).rgb;
   float direction = boxHash(seed + 2.0) * 2.0 - 1.0;
   float strong = step(0.86, boxHash(state + 97.0));
@@ -126,24 +128,37 @@ void main() {
   float scanPhase = surfaceY * 300.0;
   float scan = (0.5 + 0.5 * cos(scanPhase * 3.14159265))
     * (1.0 - smoothstep(0.5, 2.0, fwidth(scanPhase)));
-  effect *= 1.0 - uScanlineStrength * scan;
-  // Short colored fragments, only in already damaged strips. Red is rare.
+  // Scanner is its own readable layer. It remains visible between corruption bursts.
+  float scannerSweepY = fract(uTime * uScannerSpeed);
+  float sweepDistance = abs(surfaceY - scannerSweepY);
+  sweepDistance = min(sweepDistance, 1.0 - sweepDistance);
+  float sweep = exp(-sweepDistance * sweepDistance * 1800.0) * uScannerSweepStrength;
+  vec3 scanLayer = original * (1.0 - uScanlineStrength * scan)
+    + vec3(0.14, 0.72, 0.52) * sweep;
+
+  // Short colored fragments sit beside damaged fragments instead of replacing the scanner.
   float fragmentId = floor(surfaceX * 6.0);
   float colorSeed = row * 13.0 + fragmentId * 43.0 + state * 83.0;
-  float colored = step(1.0 - uColorDensity, boxHash(colorSeed));
+  float fragmentX = fract(surfaceX * 6.0);
+  float fragmentWindow = step(0.14, fragmentX) * step(fragmentX, 0.72);
+  float colored = step(1.0 - uColorDensity, boxHash(colorSeed)) * fragmentWindow * activity;
   float hue = boxHash(colorSeed + 19.0);
   vec3 accent = hue < 0.24 ? vec3(1.0, 0.01, 0.65)
     : hue < 0.48 ? vec3(0.01, 0.85, 1.0)
     : hue < 0.72 ? vec3(0.04, 1.0, 0.08)
     : hue < 0.94 ? vec3(0.03, 0.12, 1.0) : vec3(1.0, 0.015, 0.02);
   float sourceLight = dot(effect, vec3(0.2126, 0.7152, 0.0722));
-  effect = mix(effect, accent * (0.35 + sourceLight * 0.65), colored * uColorStrength);
+  vec3 colorLayer = accent * (0.22 + sourceLight * 0.48) * colored * uColorStrength;
   // Rare missing strips stay opaque, so they never reveal background geometry.
   float missing = step(0.94, boxHash(seed + 21.0));
   effect *= 1.0 - missing * 0.96;
   float grain = boxHash(floor(surfaceX * 300.0) + row * 157.0 + state * 919.0) - 0.5;
   effect = max(vec3(0.0), effect + grain * uNoiseAmount);
-  gl_FragColor = vec4(mix(original, effect, finalMask * activity * uBlendAmount), 1.0);
+  vec3 scanned = mix(original, scanLayer, uBlendAmount);
+  vec3 corrupted = mix(scanned, effect, activity * uBlendAmount);
+  // Add the chromatic accent after both layers so neither erases the scanner pattern.
+  vec3 combined = min(vec3(1.0), corrupted + colorLayer);
+  gl_FragColor = vec4(mix(original, combined, finalMask), 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }
@@ -174,7 +189,8 @@ export function createBoxCorruption(renderer: THREE.WebGLRenderer) {
     uSquareSize: { value: new THREE.Vector2(300, 300) },
     uPixelRatio: { value: renderer.getPixelRatio() }, uTime: { value: 0 },
   }
-  const keys = ['scanlineStrength', 'bandCoverage', 'bandOffsetStrength', 'tearAmount',
+  const keys = ['scanlineStrength', 'scannerSweepStrength', 'scannerSpeed',
+    'bandCoverage', 'bandOffsetStrength', 'tearAmount',
     'rgbSplitAmount', 'noiseAmount', 'blendAmount', 'colorStrength', 'colorDensity'] as const
   for (const key of keys) uniforms['u' + key[0].toUpperCase() + key.slice(1)] = { value: params[key] }
   const material = new THREE.ShaderMaterial({
