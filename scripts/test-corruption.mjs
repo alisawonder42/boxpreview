@@ -98,6 +98,21 @@ for (const ratio of [1, 1.5, 2]) {
   assert.deepEqual(uniforms.uResolution.value.toArray(), [800 * ratio, 600 * ratio])
   assert.deepEqual(uniforms.uPointer.value.toArray(), [400 * ratio, 300 * ratio])
   assert.deepEqual(uniforms.uSquareSize.value.toArray(), [300 * ratio, 300 * ratio])
+  // The same local surface point reconstructs identically after orbit and root rotation.
+  const point = new THREE.Vector3(0.15, 0.2, 0.5)
+  for (const angle of [0, 0.6, 1.2]) {
+    subject.rotation.y = angle
+    subject.updateMatrixWorld(true)
+    corruption.render(scene, camera, 1)
+    const projected = point.clone().applyMatrix4(uniforms.uObjectToClip.value)
+    const recovered = projected.clone().applyMatrix4(uniforms.uClipToObject.value)
+    assert.ok(recovered.distanceTo(point) < 1e-10, 'surface coordinates survive root rotation')
+  }
+  const transform = uniforms.uClipToObject.value.clone()
+  corruption.setPointer(450, 350)
+  corruption.render(scene, camera, 1)
+  assert.deepEqual(uniforms.uClipToObject.value.elements, transform.elements, 'cursor cannot move the surface pattern')
+  corruption.setPointer(400, 300)
   assert.equal(subject.material, original)
   assert.equal(floor.visible, true)
   assert.equal(scene.background.getHex(), 0xffffff)
@@ -145,6 +160,11 @@ const app = readFileSync(new URL('../src/viewer/app.ts', import.meta.url), 'utf8
 assert.ok(!app.includes('createTechnicalLens(') && !app.includes('createAnalogCRT('), 'old passes are absent from the active render path')
 const gui = readFileSync(new URL('../src/viewer/debug.ts', import.meta.url), 'utf8')
 assert.ok(!gui.includes('Scan Lens') && !gui.includes('Analog CRT'), 'old GUI controls remain hidden')
+
+if (process.argv.includes('--logic-only')) {
+  console.log('Render state, pointer scaling, surface reconstruction, and cursor independence checks passed; GLSL compilation skipped.')
+  process.exit(0)
+}
 
 // Compile both actual mask variants, with the original alpha-tested texture path.
 const directory = mkdtempSync(join(tmpdir(), 'box-mask-glsl-'))
