@@ -29,9 +29,13 @@ export type LensParams = {
   bloomRadius: number
   bloomThreshold: number
   grainStrength: number
-  movingRowDensity: number
+  rowFlowEnabled: boolean
   rowSpeed: number
-  rowTravel: number
+  rowDirection: number
+  symbols: string
+  symbolDensity: number
+  symbolSize: number
+  symbolChangeSpeed: number
 }
 
 export const DEFAULT_LENS: LensParams = {
@@ -61,10 +65,14 @@ export const DEFAULT_LENS: LensParams = {
   bloomStrength: 0,
   bloomRadius: 5,
   bloomThreshold: 0.62,
-  grainStrength: 0.11,
-  movingRowDensity: 0.22,
-  rowSpeed: 0.35,
-  rowTravel: 1.25,
+  grainStrength: 0,
+  rowFlowEnabled: true,
+  rowSpeed: 3,
+  rowDirection: 1,
+  symbols: 'cx3',
+  symbolDensity: 0.1,
+  symbolSize: 0.95,
+  symbolChangeSpeed: 0.5,
 }
 
 const VERTEX = /* glsl */ `
@@ -103,9 +111,13 @@ uniform float uBaseDarken;
 uniform float uEffectIntensity;
 uniform float uBorderOpacity;
 uniform float uSurfaceRoughness;
-uniform float uMovingRowDensity;
 uniform float uRowSpeed;
-uniform float uRowTravel;
+uniform float uRowDirection;
+uniform sampler2D tGlyphAtlas;
+uniform float uGlyphCount;
+uniform float uSymbolDensity;
+uniform float uSymbolSize;
+uniform float uSymbolChangeSpeed;
 uniform float uRowTime;
 uniform float uRowMotionEnabled;
 
@@ -153,29 +165,16 @@ void main() {
 
   float cellSize = max(uCellSize, 2.0);
   vec2 cellId = floor(pixel / cellSize);
-  float baseRow = cellId.y;
-  float bestDistance = 1e10;
-  vec2 movedCenter = (cellId + 0.5) * cellSize;
-  // Search source rows, including rows that have moved across cell boundaries.
-  // Stable per-row selection keeps most rows anchored; this moves point
-  // positions themselves, rather than just changing their sampled brightness.
-  for (int offset = -4; offset <= 4; offset++) {
-    float sourceRow = baseRow + float(offset);
-    float seed = hash21(vec2(sourceRow, 73.19));
-    float moving = (1.0 - step(clamp(uMovingRowDensity, 0.0, 1.0), seed)) * uRowMotionEnabled;
-    float phase = hash21(vec2(sourceRow, 18.7)) * 6.2831853;
-    float travel = sin(uRowTime * uRowSpeed * 6.2831853 * (0.75 + seed * 0.5) + phase)
-      * clamp(uRowTravel, 0.0, 3.0) * cellSize * moving;
-    float centerY = (sourceRow + 0.5) * cellSize + travel;
-    float distanceY = abs(pixel.y - centerY);
-    if (distanceY < bestDistance) {
-      bestDistance = distanceY;
-      cellId.y = sourceRow;
-      movedCenter.y = centerY;
-    }
-  }
+  // The display grid never moves. Cycle the source row identities instead.
+  vec2 localPx = pixel - (cellId + 0.5) * cellSize;
+  float firstRow = ceil((uPointer.y - halfLens) / cellSize - 0.5);
+  float lastRow = floor((uPointer.y + halfLens) / cellSize - 0.5);
+  float rowCount = max(lastRow - firstRow + 1.0, 1.0);
+  float rowStep = floor(uRowTime * uRowSpeed) * uRowMotionEnabled;
+  // Texture Y points upward, so reading from the next higher row moves
+  // its contents downward. Wrap the last row back to the top of the lens.
+  cellId.y = firstRow + mod(cellId.y - firstRow + rowStep * uRowDirection, rowCount);
   vec2 cellCenter = (cellId + 0.5) * cellSize;
-  vec2 localPx = pixel - movedCenter;
   vec2 cellUv = clamp(cellCenter / uResolution, vec2(0.001), vec2(0.999));
 
   vec4 subjectHere = texture2D(tSubject, vUv);
@@ -193,10 +192,10 @@ void main() {
   float baseLum = scanSurfaceLight(subjectSample);
 
   vec2 texel = 1.0 / uResolution;
-  vec4 normalL = texture2D(tSubject, vUv - vec2(texel.x * 2.0, 0.0));
-  vec4 normalR = texture2D(tSubject, vUv + vec2(texel.x * 2.0, 0.0));
-  vec4 normalD = texture2D(tSubject, vUv - vec2(0.0, texel.y * 2.0));
-  vec4 normalU = texture2D(tSubject, vUv + vec2(0.0, texel.y * 2.0));
+  vec4 normalL = texture2D(tSubject, cellUv - vec2(texel.x * 2.0, 0.0));
+  vec4 normalR = texture2D(tSubject, cellUv + vec2(texel.x * 2.0, 0.0));
+  vec4 normalD = texture2D(tSubject, cellUv - vec2(0.0, texel.y * 2.0));
+  vec4 normalU = texture2D(tSubject, cellUv + vec2(0.0, texel.y * 2.0));
   float detailEdge = clamp((length(normalR - normalL) + length(normalU - normalD)) * 2.4 * uEdgeBoost, 0.0, 1.0);
 
   float contrast = mix(1.22, 1.55, 1.0 - clamp(uSurfaceRoughness, 0.0, 1.0));
@@ -210,6 +209,19 @@ void main() {
   float radius = clamp(uPointSize, 0.35, cellSize * 0.48);
   float pointDistance = length(localPx);
   float pointShape = 1.0 - smoothstep(radius, radius + 0.9, pointDistance);
+
+  float symbolTick = floor(uTime * uSymbolChangeSpeed);
+  float symbolSeed = hash21(cellId + vec2(531.7, 98.3) + symbolTick);
+  float useSymbol = (1.0 - step(uSymbolDensity, symbolSeed)) * step(0.5, uGlyphCount);
+  vec2 glyphUv = localPx / max(cellSize * uSymbolSize, 1.0) + 0.5;
+  float glyphInside = step(0.0, glyphUv.x) * step(glyphUv.x, 1.0)
+    * step(0.0, glyphUv.y) * step(glyphUv.y, 1.0);
+  float glyphId = floor(hash21(cellId + vec2(82.7, 16.2) + symbolTick) * max(uGlyphCount, 1.0));
+  vec2 atlasUv = vec2((glyphId + clamp(glyphUv.x, 0.001, 0.999)) / max(uGlyphCount, 1.0),
+    clamp(glyphUv.y, 0.001, 0.999));
+  float glyphShape = texture2D(tGlyphAtlas, atlasUv).a * glyphInside;
+  pointShape = mix(pointShape, glyphShape, useSymbol);
+
 
   float flickerSeed = hash21(cellId + vec2(floor(uTime * 9.0), floor(uTime * 5.0) + 41.0));
   float flicker = mix(1.0 - uFlicker * 0.28, 1.0 + uFlicker, flickerSeed);
@@ -234,8 +246,6 @@ void main() {
   float luminous = pointShape * keepPoint * subjectMask;
   scanBase += pointColor * luminous * uEffectIntensity;
 
-  float microNoise = hash21(pixel + floor(uTime * 16.0));
-  scanBase += palette * subjectMask * shapedLum * microNoise * 0.035 * uEffectIntensity;
 
   float brokenSegment = step(0.62, hash21(vec2(floor(pixel.x / 30.0), rowId + timeStep * 2.0)));
   float rowPhase = mod(pixel.y, max(cellSize * 0.72, 1.0));
@@ -361,11 +371,44 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     uBloomRadius: { value: params.bloomRadius },
     uBloomThreshold: { value: params.bloomThreshold },
     uGrainStrength: { value: params.grainStrength },
-    uMovingRowDensity: { value: params.movingRowDensity },
+    uRowDirection: { value: params.rowDirection },
+    tGlyphAtlas: { value: new THREE.Texture() },
+    uGlyphCount: { value: 0 },
+    uSymbolDensity: { value: params.symbolDensity },
+    uSymbolSize: { value: params.symbolSize },
+    uSymbolChangeSpeed: { value: params.symbolChangeSpeed },
     uRowSpeed: { value: params.rowSpeed },
-    uRowTravel: { value: params.rowTravel },
     uRowTime: { value: 0 },
     uRowMotionEnabled: { value: 1 },
+  }
+
+  let previousSymbols: string | undefined
+  const updateGlyphAtlas = () => {
+    const symbols = [...new Set(Array.from(params.symbols.replace(/\s/g, '')))].slice(0, 32)
+    const key = symbols.join('')
+    if (key === previousSymbols) return
+    previousSymbols = key
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(symbols.length, 1) * 64
+    canvas.height = 64
+    const context = canvas.getContext('2d')
+    if (!context) {
+      uniforms.uGlyphCount.value = 0
+      return
+    }
+    context.clearRect(0, 0, canvas.width, canvas.height)
+    context.font = 'bold 48px monospace'
+    context.textAlign = 'center'
+    context.textBaseline = 'middle'
+    context.fillStyle = '#ffffff'
+    symbols.forEach((symbol, index) => context.fillText(symbol, index * 64 + 32, 32, 54))
+    const atlas = new THREE.CanvasTexture(canvas)
+    atlas.minFilter = THREE.LinearFilter
+    atlas.magFilter = THREE.LinearFilter
+    atlas.generateMipmaps = false
+    uniforms.tGlyphAtlas.value.dispose()
+    uniforms.tGlyphAtlas.value = atlas
+    uniforms.uGlyphCount.value = symbols.length
   }
 
   const compositeMaterial = new THREE.ShaderMaterial({
@@ -469,11 +512,14 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     uniforms.uBloomStrength.value = params.bloomStrength
     uniforms.uBloomThreshold.value = params.bloomThreshold
     uniforms.uGrainStrength.value = params.grainStrength
-    uniforms.uMovingRowDensity.value = params.movingRowDensity
+    uniforms.uRowDirection.value = params.rowDirection < 0 ? -1 : 1
+    uniforms.uSymbolDensity.value = params.symbolDensity
+    uniforms.uSymbolSize.value = params.symbolSize
+    uniforms.uSymbolChangeSpeed.value = params.symbolChangeSpeed
+    updateGlyphAtlas()
     uniforms.uRowSpeed.value = params.rowSpeed
-    uniforms.uRowTravel.value = params.rowTravel
     uniforms.uRowTime.value = elapsed
-    uniforms.uRowMotionEnabled.value = reducedMotion.matches ? 0 : 1
+    uniforms.uRowMotionEnabled.value = reducedMotion.matches || !params.rowFlowEnabled ? 0 : 1
     syncSize()
   }
 
@@ -562,6 +608,7 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
   }
 
   const dispose = () => {
+    uniforms.tGlyphAtlas.value.dispose()
     sceneTarget.dispose()
     subjectTarget.dispose()
     effectTarget.dispose()

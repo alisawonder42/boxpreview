@@ -7,9 +7,7 @@ import { execFileSync } from 'node:child_process'
 import { WebGLProgram } from 'three/src/renderers/webgl/WebGLProgram.js'
 import { ACESFilmicToneMapping, SRGBColorSpace } from 'three'
 
-const source = readFileSync(new URL('../src/viewer/technicalLens.ts', import.meta.url), 'utf8')
-const vertexShader = source.match(/const VERTEX =[^`]*`([\s\S]*?)`/)[1]
-const fragments = [...source.matchAll(/const (?:BLOOM_)?FRAGMENT =[^`]*`([\s\S]*?)`/g)].map(match => match[1])
+const sources = ['technicalLens.ts', 'analogCRT.ts'].map(file => readFileSync(new URL('../src/viewer/' + file, import.meta.url), 'utf8'))
 const directory = mkdtempSync(join(tmpdir(), 'box-lens-glsl-'))
 const gl = {
   VERTEX_SHADER: 'vert', FRAGMENT_SHADER: 'frag',
@@ -19,7 +17,10 @@ const gl = {
 }
 
 try {
-  for (const fragmentShader of fragments) {
+  for (const source of sources) {
+    const vertexShader = source.match(/const VERTEX =[^`]*`([\s\S]*?)`/)[1]
+    const fragments = [...source.matchAll(/const (?:BLOOM_)?FRAGMENT =[^`]*`([\s\S]*?)`/g)].map(match => match[1])
+    for (const fragmentShader of fragments) {
     new WebGLProgram({ getContext: () => gl }, 'shader-test', {
       vertexShader, fragmentShader, defines: {}, precision: 'highp',
       shaderType: 'ShaderMaterial', shaderName: 'ScanLens',
@@ -30,7 +31,8 @@ try {
       '-l', join(directory, 'lens.vert'), join(directory, 'lens.frag'),
     ], { stdio: 'inherit' })
   }
-  console.log('Three.js-generated lens and bloom shaders compile and link successfully.')
+  }
+  console.log('Three.js-generated scan, symbol, and analog CRT shaders compile and link successfully.')
 } finally {
   rmSync(directory, { recursive: true, force: true })
 }
