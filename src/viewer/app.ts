@@ -133,6 +133,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   const hideHint = () => hintWrap?.classList.add('is-hidden')
 
   const onPointerMove = (event: PointerEvent) => {
+    corruption.setPointer(event.clientX, event.clientY)
     pointerPixels.set(event.clientX, event.clientY)
     pointerNDC.set(
       (event.clientX / window.innerWidth) * 2 - 1,
@@ -140,6 +141,10 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     )
   }
   canvas.addEventListener('pointermove', onPointerMove)
+  canvas.addEventListener('pointerdown', onPointerMove)
+  canvas.addEventListener('pointerleave', corruption.clearPointer)
+  canvas.addEventListener('pointercancel', corruption.clearPointer)
+  window.addEventListener('blur', corruption.clearPointer)
   canvas.addEventListener('pointerdown', hideHint)
 
   reset?.addEventListener('click', () => {

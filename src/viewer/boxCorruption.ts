@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js'
 
 export const DEFAULT_CORRUPTION = {
-  enabled: true, scanlineStrength: 0.16, bandCoverage: 0.22,
+  enabled: true, squareSize: 300, colorStrength: 0.8, colorDensity: 0.45, scanlineStrength: 0.16, bandCoverage: 0.22,
   bandOffsetStrength: 12, tearAmount: 0.3, rgbSplitAmount: 0.65,
   noiseAmount: 0, blendAmount: 0.7, animationSpeed: 1,
 }
@@ -19,7 +19,10 @@ const FRAGMENT = /* glsl */ `
 uniform sampler2D tScene;
 uniform sampler2D tMask;
 uniform vec2 uResolution;
-uniform vec2 uSubjectY;
+uniform vec2 uPointer;
+uniform vec2 uSquareSize;
+uniform float uColorStrength;
+uniform float uColorDensity;
 uniform float uPixelRatio;
 uniform float uTime;
 uniform float uScanlineStrength;
@@ -62,8 +65,14 @@ vec3 boxRead(vec2 uv, vec3 original) {
   return texture2D(tScene, uv).rgb;
 }
 void main() {
-  if (boxInterior(vUv) < 0.5 || uBlendAmount <= 0.0) discard;
-  float y = clamp((vUv.y - uSubjectY.x) / max(uSubjectY.y - uSubjectY.x, 0.001), 0.0, 0.9999);
+  // Both masks use the undistorted destination; sampling never moves the boundary.
+  vec2 local = (vUv * uResolution - uPointer) / uSquareSize + 0.5;
+  float cursorSquareMask = step(0.0, local.x) * step(local.x, 1.0)
+    * step(0.0, local.y) * step(local.y, 1.0);
+  float objectMask = boxMask(vUv);
+  float finalMask = cursorSquareMask * objectMask;
+  if (finalMask < 0.999 || boxInterior(vUv) < 0.5 || uBlendAmount <= 0.0) discard;
+  float y = clamp(local.y, 0.0, 0.9999);
   // Four separated horizontal regions: the selected width totals bandCoverage.
   // Hold each state, then briefly reassemble before selecting a fresh set.
   float state = floor(uTime);
@@ -86,19 +95,31 @@ void main() {
     * pulse * uPixelRatio / uResolution.x;
   // Some strips compress their source X range into a stretched/duplicated row.
   float stretch = step(0.78, boxHash(seed + 8.0)) * 0.65 * pulse;
-  float anchor = 0.3 + boxHash(seed + 10.0) * 0.4;
+  float anchor = uPointer.x / uResolution.x;
   float x = mix(vUv.x + shift, anchor + (vUv.x + shift - anchor) * 0.22, stretch);
-  float split = uRgbSplitAmount * (0.25 + tear) * pulse * uPixelRatio / uResolution.x;
+  float brokenRow = step(0.55, boxHash(row + state * 71.0));
+  float split = uRgbSplitAmount * (0.25 + 2.0 * brokenRow + tear) * pulse * uPixelRatio / uResolution.x;
   vec3 effect = vec3(boxRead(vec2(x + split, vUv.y), original).r,
     boxRead(vec2(x, vUv.y), original).g, boxRead(vec2(x - split, vUv.y), original).b);
   float scan = 0.5 + 0.5 * cos(gl_FragCoord.y / uPixelRatio * 3.14159265);
   effect *= 1.0 - uScanlineStrength * scan;
+  // Short colored fragments, only in already damaged strips. Red is rare.
+  float fragmentId = floor(local.x * 6.0);
+  float colorSeed = row * 13.0 + fragmentId * 43.0 + state * 83.0;
+  float colored = step(1.0 - uColorDensity, boxHash(colorSeed));
+  float hue = boxHash(colorSeed + 19.0);
+  vec3 accent = hue < 0.24 ? vec3(1.0, 0.01, 0.65)
+    : hue < 0.48 ? vec3(0.01, 0.85, 1.0)
+    : hue < 0.72 ? vec3(0.04, 1.0, 0.08)
+    : hue < 0.94 ? vec3(0.03, 0.12, 1.0) : vec3(1.0, 0.015, 0.02);
+  float sourceLight = dot(effect, vec3(0.2126, 0.7152, 0.0722));
+  effect = mix(effect, accent * (0.35 + sourceLight * 0.65), colored * uColorStrength);
   // Rare missing strips stay opaque, so they never reveal background geometry.
   float missing = step(0.94, boxHash(seed + 21.0));
   effect *= 1.0 - missing * 0.96;
   float grain = boxHash(gl_FragCoord.x + row * 157.0 + state * 919.0) - 0.5;
   effect = max(vec3(0.0), effect + grain * uNoiseAmount);
-  gl_FragColor = vec4(mix(original, effect, activity * uBlendAmount), 1.0);
+  gl_FragColor = vec4(mix(original, effect, finalMask * activity * uBlendAmount), 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }
@@ -121,11 +142,12 @@ export function createBoxCorruption(renderer: THREE.WebGLRenderer) {
   const maskTarget = createTarget('BoxCorruption.visibleMask', THREE.NearestFilter)
   const uniforms: Record<string, THREE.IUniform> = {
     tScene: { value: colorTarget.texture }, tMask: { value: maskTarget.texture },
-    uResolution: { value: size }, uSubjectY: { value: new THREE.Vector2(0, 1) },
+    uResolution: { value: size }, uPointer: { value: new THREE.Vector2() },
+    uSquareSize: { value: new THREE.Vector2(300, 300) },
     uPixelRatio: { value: renderer.getPixelRatio() }, uTime: { value: 0 },
   }
   const keys = ['scanlineStrength', 'bandCoverage', 'bandOffsetStrength', 'tearAmount',
-    'rgbSplitAmount', 'noiseAmount', 'blendAmount'] as const
+    'rgbSplitAmount', 'noiseAmount', 'blendAmount', 'colorStrength', 'colorDensity'] as const
   for (const key of keys) uniforms['u' + key[0].toUpperCase() + key.slice(1)] = { value: params[key] }
   const material = new THREE.ShaderMaterial({
     name: 'Rigid box surface corruption', uniforms, vertexShader: VERTEX, fragmentShader: FRAGMENT,
@@ -175,8 +197,10 @@ export function createBoxCorruption(renderer: THREE.WebGLRenderer) {
     maskTarget.setSize(Math.max(1, size.x), Math.max(1, size.y))
     uniforms.uPixelRatio.value = renderer.getPixelRatio()
   }
-  const bounds = new THREE.Box3()
-  const corner = new THREE.Vector3()
+  const pointer = new THREE.Vector2()
+  let pointerActive = false
+  const setPointer = (x: number, y: number) => { pointer.set(x, y); pointerActive = true }
+  const clearPointer = () => { pointerActive = false }
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
   let signalTime = 0.35
   let lastTime: number | undefined
@@ -186,17 +210,12 @@ export function createBoxCorruption(renderer: THREE.WebGLRenderer) {
     if (!reducedMotion.matches) signalTime += dt * params.animationSpeed
     // Direct rendering retains the original antialiased outline and background.
     renderer.render(scene, camera)
-    if (!params.enabled || params.blendAmount <= 0 || !subject) return
-    bounds.setFromObject(subject)
-    if (bounds.isEmpty()) return
-    let minY = 1, maxY = 0
-    for (let i = 0; i < 8; i++) {
-      corner.set(i & 1 ? bounds.max.x : bounds.min.x, i & 2 ? bounds.max.y : bounds.min.y,
-        i & 4 ? bounds.max.z : bounds.min.z).project(camera)
-      minY = Math.min(minY, corner.y * 0.5 + 0.5)
-      maxY = Math.max(maxY, corner.y * 0.5 + 0.5)
-    }
-    uniforms.uSubjectY.value.set(Math.max(0, minY), Math.min(1, maxY))
+    if (!params.enabled || params.blendAmount <= 0 || !subject || !pointerActive) return
+    const rect = renderer.domElement.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return
+    const sx = size.x / rect.width, sy = size.y / rect.height
+    uniforms.uPointer.value.set((pointer.x - rect.left) * sx, (rect.bottom ?? rect.top + rect.height) * sy - pointer.y * sy)
+    uniforms.uSquareSize.value.set(params.squareSize * sx, params.squareSize * sy)
     uniforms.uTime.value = reducedMotion.matches ? 0.35 : signalTime
     for (const key of keys) uniforms['u' + key[0].toUpperCase() + key.slice(1)].value = params[key]
     const previousTarget = renderer.getRenderTarget()
@@ -243,7 +262,7 @@ export function createBoxCorruption(renderer: THREE.WebGLRenderer) {
       renderer.setScissorTest(scissorTest)
     }
   }
-  return { params, setSubject, resize, render, dispose: () => {
+  return { params, setPointer, clearPointer, setSubject, resize, render, dispose: () => {
     clearMasks(); colorTarget.dispose(); maskTarget.dispose(); material.dispose(); quad.dispose()
   } }
 }

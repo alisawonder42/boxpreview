@@ -53,12 +53,14 @@ subject or across a sharp face boundary fall back to the original pixel.
 
 The original scene renders directly first. Only affected interior pixels are then
 overwritten with an opaque blend, preserving the background and antialiased outline.
-There is no cursor square. Drag/orbit, reset, resize, and model replacement remain
+The fixed 300px cursor square intersects the object mask; only their overlap is
+affected. Pointer leave disables the overlay. Drag/orbit, reset, resize, and model replacement remain
 available. Reduced-motion preferences freeze the corruption pattern.
 
 **Look → Box · horizontal corruption** exposes scanlines, band coverage, strip
-offset, tears, RGB split, optional band noise, blend, and animation speed. The
-initial coverage is 22% of projected box height, before edge protection, with a
+offset, tears, RGB split, square size, color strength/density, optional band noise,
+blend, and animation speed. Magenta, cyan, green, blue and rare red fragments appear
+only in damaged rows. The initial coverage is 22% of square height, before edge protection, with a
 70% blend within those bands. Actual affected surface area varies with the view;
 most of the texture stays readable. Noise defaults to zero.
 
