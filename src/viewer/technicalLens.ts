@@ -21,6 +21,7 @@ export type LensParams = {
   shadowThreshold: number
   highlightThreshold: number
   baseDarken: number
+  effectOpacity: number
   effectIntensity: number
   borderOpacity: number
   surfaceRoughness: number
@@ -41,11 +42,11 @@ export type LensParams = {
 export const DEFAULT_LENS: LensParams = {
   enabled: true,
   lensSize: 300,
-  cellSize: 6,
-  pointSize: 1.8,
-  pointDensity: 0.65,
+  cellSize: 4.4,
+  pointSize: 1.4,
+  pointDensity: 0.92,
   flicker: 0.64,
-  edgeBoost: 0.84,
+  edgeBoost: 1.39,
   glitchAmount: 0.28,
   glitchFrequency: 2,
   glitchShift: 27,
@@ -58,20 +59,21 @@ export const DEFAULT_LENS: LensParams = {
   shadowThreshold: 0.6,
   highlightThreshold: 0.82,
   baseDarken: 0.37,
+  effectOpacity: 0.5,
   effectIntensity: 0.91,
   borderOpacity: 0.69,
-  surfaceRoughness: 0.7,
+  surfaceRoughness: 0.63,
   animSpeed: 2,
   bloomStrength: 0,
   bloomRadius: 5,
   bloomThreshold: 0.62,
   grainStrength: 0,
-  rowFlowEnabled: true,
+  rowFlowEnabled: false,
   rowSpeed: 3,
   rowDirection: 1,
-  symbols: 'cx3',
-  symbolDensity: 0.1,
-  symbolSize: 0.95,
+  symbols: '1',
+  symbolDensity: 0.4,
+  symbolSize: 0.55,
   symbolChangeSpeed: 0.5,
 }
 
@@ -624,6 +626,7 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
   const getWindow = () => {
     syncSize()
     return { center: uniforms.uPointer.value, size: uniforms.uLensSize.value,
+      originalTexture: sceneTarget.texture, opacity: params.effectOpacity,
       active: pointerActive && params.enabled && subjectMeshes.size > 0 }
   }
   return { params, render, setPointer, setPointerActive, setSubject, resize, dispose, getWindow }

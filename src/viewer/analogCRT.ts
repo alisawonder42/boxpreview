@@ -2,11 +2,11 @@ import * as THREE from 'three'
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js'
 
 export const DEFAULT_CRT = {
-  enabled: true, strength: 0.65, lineSpacing: 2.4, lineStrength: 0.2,
-  lineIrregularity: 0.25, calmDisplacement: 0.35, largeDisplacement: 24,
-  mediumDisplacement: 9, jitter: 0.7, rowStep: 3, tearStrength: 36,
-  tearWidth: 0.035, rgbSeparation: 2, burstRate: 0.3,
-  burstDuration: 0.3, settleTime: 0.3, amplitudeVariation: 0.08,
+  enabled: true, strength: 0.6, lineSpacing: 1.5, lineStrength: 0.4,
+  lineIrregularity: 0, calmDisplacement: 0.35, largeDisplacement: 24,
+  mediumDisplacement: 9, jitter: 3.25, rowStep: 3, tearStrength: 36,
+  tearWidth: 0.035, rgbSeparation: 4.8, burstRate: 1.2,
+  burstDuration: 0.07, settleTime: 0.16, amplitudeVariation: 0.08,
 }
 export type CRTParams = typeof DEFAULT_CRT
 
@@ -44,6 +44,9 @@ void main() {
 
 const FRAGMENT = /* glsl */ `
 uniform sampler2D tFrame;
+uniform sampler2D tOriginal;
+uniform float uEffectOpacity;
+uniform bool uCrtEnabled;
 uniform vec2 uResolution;
 uniform vec2 uLensCenter;
 uniform float uLensSize;
@@ -100,6 +103,12 @@ void main() {
     #include <colorspace_fragment>
     return;
   }
+  if (!uCrtEnabled) {
+    gl_FragColor = vec4(mix(texture2D(tOriginal, vUv).rgb, texture2D(tFrame, vUv).rgb, uEffectOpacity), 1.0);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+    return;
+  }
   float y = vUv.y;
   float heldTime = floor(uTime * 5.0);
   float steppedY = floor(y * uResolution.y / max(uRowStep * uPixelRatio, 1.0))
@@ -126,7 +135,10 @@ void main() {
   // evaluated at displaced source X, so the lines bend with the picture.
   vec3 color = vec3(crtRead(x + split, y).r, crtRead(x, y).g, crtRead(x - split, y).b);
   float amplitude = 1.0 - uAmplitudeVariation * activity * crtNoise(bandY * 61.0 + uSeed);
-  gl_FragColor = vec4(color * amplitude, 1.0);
+  // Blend the completed signal against the untouched scene at the original UV.
+  // Both are linear; tone mapping and output conversion happen once after mixing.
+  vec3 original = texture2D(tOriginal, vUv).rgb;
+  gl_FragColor = vec4(mix(original, color * amplitude, uEffectOpacity), 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }
@@ -142,6 +154,7 @@ export function createAnalogCRT(renderer: THREE.WebGLRenderer) {
   })
   target.texture.name = 'AnalogCRT.finalFrame'
   const uniforms: Record<string, THREE.IUniform> = {
+    tOriginal: { value: null }, uEffectOpacity: { value: 0.5 }, uCrtEnabled: { value: true },
     tFrame: { value: target.texture }, uResolution: { value: size },
     uLensCenter: { value: new THREE.Vector2() }, uLensSize: { value: 0 },
     uPixelRatio: { value: renderer.getPixelRatio() },
@@ -164,11 +177,14 @@ export function createAnalogCRT(renderer: THREE.WebGLRenderer) {
     uniforms.uPixelRatio.value = renderer.getPixelRatio()
   }
   const render = (drawFrame: () => void, elapsed: number,
-    window: { center: THREE.Vector2; size: number; active: boolean }) => {
+    window: { center: THREE.Vector2; size: number; active: boolean; originalTexture: THREE.Texture; opacity: number }) => {
     const state = signal(elapsed, params, reducedMotion.matches)
-    if (!params.enabled || !window.active) { drawFrame(); return }
+    if (!window.active) { drawFrame(); return }
     uniforms.uLensCenter.value.copy(window.center)
     uniforms.uLensSize.value = window.size
+    uniforms.tOriginal.value = window.originalTexture
+    uniforms.uEffectOpacity.value = THREE.MathUtils.clamp(window.opacity, 0, 1)
+    uniforms.uCrtEnabled.value = params.enabled
     uniforms.uTime.value = reducedMotion.matches ? 0 : elapsed
     uniforms.uBurst.value = state.envelope
     uniforms.uSeed.value = state.seed
