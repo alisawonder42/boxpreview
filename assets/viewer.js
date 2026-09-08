@@ -4294,7 +4294,9 @@ float hash21(vec2 p) {
   return fract(p.x * p.y);
 }
 
-float luminance(vec3 color) {
+// Three.js injects luminance(vec3) into ShaderMaterial's fragment prefix.
+// Keep our helper namespaced to avoid a duplicate GLSL function definition.
+float scanLuminance(vec3 color) {
   return dot(color, vec3(0.2126, 0.7152, 0.0722));
 }
 
@@ -4334,13 +4336,13 @@ void main() {
   vec2 shiftedUv = clamp(cellUv + vec2(shiftPx / uResolution.x, 0.0), vec2(0.001), vec2(0.999));
 
   vec4 subjectSample = texture2D(tSubject, shiftedUv);
-  float baseLum = luminance(subjectSample.rgb);
+  float baseLum = scanLuminance(subjectSample.rgb);
 
   vec2 texel = 1.0 / uResolution;
-  float lumL = luminance(texture2D(tSubject, clamp(cellUv - vec2(texel.x * 2.0, 0.0), vec2(0.001), vec2(0.999))).rgb);
-  float lumR = luminance(texture2D(tSubject, clamp(cellUv + vec2(texel.x * 2.0, 0.0), vec2(0.001), vec2(0.999))).rgb);
-  float lumD = luminance(texture2D(tSubject, clamp(cellUv - vec2(0.0, texel.y * 2.0), vec2(0.001), vec2(0.999))).rgb);
-  float lumU = luminance(texture2D(tSubject, clamp(cellUv + vec2(0.0, texel.y * 2.0), vec2(0.001), vec2(0.999))).rgb);
+  float lumL = scanLuminance(texture2D(tSubject, clamp(cellUv - vec2(texel.x * 2.0, 0.0), vec2(0.001), vec2(0.999))).rgb);
+  float lumR = scanLuminance(texture2D(tSubject, clamp(cellUv + vec2(texel.x * 2.0, 0.0), vec2(0.001), vec2(0.999))).rgb);
+  float lumD = scanLuminance(texture2D(tSubject, clamp(cellUv - vec2(0.0, texel.y * 2.0), vec2(0.001), vec2(0.999))).rgb);
+  float lumU = scanLuminance(texture2D(tSubject, clamp(cellUv + vec2(0.0, texel.y * 2.0), vec2(0.001), vec2(0.999))).rgb);
   float detailEdge = clamp((abs(lumR - lumL) + abs(lumU - lumD)) * 3.2 * uEdgeBoost, 0.0, 1.0);
 
   float contrast = mix(1.22, 1.55, 1.0 - clamp(uSurfaceRoughness, 0.0, 1.0));
