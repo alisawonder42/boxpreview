@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js'
 
 export const DEFAULT_CRT = {
-  enabled: true, strength: 0.6, lineSpacing: 1.5, lineStrength: 0.4,
+  enabled: false, strength: 0.6, lineSpacing: 1.5, lineStrength: 0.4,
   lineIrregularity: 0, calmDisplacement: 0.35, largeDisplacement: 24,
   mediumDisplacement: 9, jitter: 3.25, rowStep: 3, tearStrength: 36,
   tearWidth: 0.035, rgbSeparation: 4.8, burstRate: 1.2,

@@ -2,8 +2,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 import { attachDebugMenu, DEFAULT_LIGHT, type LightLook } from './debug'
-import { createTechnicalLens } from './technicalLens'
-import { createAnalogCRT } from './analogCRT'
+import { createBoxCorruption } from './boxCorruption'
 import {
   createGround,
   findBundledScan,
@@ -97,9 +96,9 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   }
   applyLook()
 
-  const lens = createTechnicalLens(renderer)
-  const crt = createAnalogCRT(renderer)
-  lens.setSubject(subject)
+  // Legacy technicalLens/analogCRT remain available in their modules, but are not active.
+  const corruption = createBoxCorruption(renderer)
+  corruption.setSubject(subject)
   const clock = new THREE.Clock()
 
   const controls = new OrbitControls(camera, canvas)
@@ -124,12 +123,12 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     scene.remove(subject)
     subject = next
     scene.add(subject)
-    lens.setSubject(subject)
+    corruption.setSubject(subject)
     fitDesk(desk, subject, look.deskSize)
     setSource(label)
   }
 
-  attachDebugMenu({ look, onLook: applyLook, lens: lens.params, crt: crt.params })
+  attachDebugMenu({ look, onLook: applyLook, corruption: corruption.params })
 
   const hideHint = () => hintWrap?.classList.add('is-hidden')
 
@@ -139,18 +138,9 @@ export async function startViewer(canvas: HTMLCanvasElement) {
       (event.clientX / window.innerWidth) * 2 - 1,
       -(event.clientY / window.innerHeight) * 2 + 1,
     )
-    lens.setPointer(event.clientX, event.clientY)
-    lens.setPointerActive(true)
   }
   canvas.addEventListener('pointermove', onPointerMove)
   canvas.addEventListener('pointerdown', hideHint)
-  canvas.addEventListener('pointerenter', (event) => {
-    lens.setPointer(event.clientX, event.clientY)
-    lens.setPointerActive(true)
-  })
-  canvas.addEventListener('pointerleave', () => {
-    lens.setPointerActive(false)
-  })
 
   reset?.addEventListener('click', () => {
     camera.position.copy(HOME_POSITION)
@@ -191,8 +181,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     camera.aspect = w / h
     camera.updateProjectionMatrix()
     renderer.setSize(w, h)
-    lens.resize()
-    crt.resize()
+    corruption.resize()
   })
 
   const loop = () => {
@@ -201,7 +190,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     canvas.dataset.pointer = `${pointerNDC.x.toFixed(3)},${pointerNDC.y.toFixed(3)}`
     canvas.dataset.pointerPx = `${pointerPixels.x.toFixed(0)},${pointerPixels.y.toFixed(0)}`
     const elapsed = clock.getElapsedTime()
-    crt.render(() => lens.render(scene, camera, elapsed), elapsed, lens.getWindow())
+    corruption.render(scene, camera, elapsed)
   }
   loop()
   document.body.classList.add('ready')

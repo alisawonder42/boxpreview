@@ -43,17 +43,39 @@ Embed: `https://alisawonder42.github.io/boxpreview/?embed=1`
 
 Or copy `src/viewer` into the portfolio and mount the canvas there. It is vanilla Three.js — no React.
 
-## Emerald square lens
+## Rigid box surface corruption
 
-Move the pointer over the canvas to reveal an emerald metallic rendering in a square.
-Drag to rotate as before. The original and emerald passes share a camera, geometry,
-and full drawing-buffer resolution, so the relief stays aligned. Normal, bump, and
-AO maps are retained when supplied by a model. Fine mint/gold glints follow the
-surface; restrained horizontal interference and grain are composited afterward.
-Use **Look → Emerald Lens** to tune square size, roughness, reflections, glints,
-grain, interference, and animation speed. Animation respects reduced-motion settings.
-The extra material pass runs only while the lens is active.
+The active effect resamples the original rendered box into restrained horizontal
+strips. It never displaces vertices or moves the silhouette. A depth-tested object
+mask includes scene occluders and alpha cutouts; geometric normals protect sharp
+face creases. A narrow rim stays untouched, and shifted color samples outside the
+subject or across a sharp face boundary fall back to the original pixel.
 
-Validation: production build passes. The available remote preview browser has
-WebGL disabled, so GPU shader compilation and visual matching need verification
-in a WebGL-capable browser.
+The original scene renders directly first. Only affected interior pixels are then
+overwritten with an opaque blend, preserving the background and antialiased outline.
+There is no cursor square. Drag/orbit, reset, resize, and model replacement remain
+available. Reduced-motion preferences freeze the corruption pattern.
+
+**Look → Box · horizontal corruption** exposes scanlines, band coverage, strip
+offset, tears, RGB split, optional band noise, blend, and animation speed. The
+initial coverage is 22% of projected box height, before edge protection, with a
+70% blend within those bands. Actual affected surface area varies with the view;
+most of the texture stays readable. Noise defaults to zero.
+
+The older implementations remain in `technicalLens.ts` and `analogCRT.ts`, disabled
+by default, omitted from the active render chain, and hidden from the GUI. To
+restore them later, explicitly enable and reconnect those modules in `app.ts`.
+
+Validation:
+
+```bash
+npm run build
+node scripts/test-lens.mjs
+node scripts/test-signal.mjs
+node scripts/test-shader.mjs /path/to/glslangValidator
+node scripts/test-corruption.mjs /path/to/glslangValidator
+```
+
+The tests cover capture sources, mask/occluder materials, cutouts, render-state
+restoration, reduced motion, disabled bypass, and GLSL compilation/linking. The
+remote browser has WebGL disabled; visual matching needs a WebGL-capable browser.
