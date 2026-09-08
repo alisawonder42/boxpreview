@@ -58,7 +58,8 @@ void main() {
 `
 
 const FRAGMENT = /* glsl */ `
-uniform sampler2D tScan;
+uniform sampler2D tScene;
+uniform sampler2D tSubject;
 uniform vec2 uResolution;
 uniform vec2 uPointer;
 uniform float uLensSize;
@@ -81,6 +82,7 @@ uniform float uHighlightThreshold;
 uniform float uBaseDarken;
 uniform float uEffectIntensity;
 uniform float uBorderOpacity;
+uniform float uSurfaceRoughness;
 
 varying vec2 vUv;
 
@@ -90,124 +92,102 @@ float hash21(vec2 p) {
   return fract(p.x * p.y);
 }
 
-float luminance(vec3 c) {
-  return dot(c, vec3(0.2126, 0.7152, 0.0722));
+float luminance(vec3 color) {
+  return dot(color, vec3(0.2126, 0.7152, 0.0722));
 }
 
 vec3 scanPalette(float value) {
-  float lowRange = max(uShadowThreshold, 0.001);
-  float highRange = max(1.0 - uHighlightThreshold, 0.001);
-  float toMid = smoothstep(0.0, lowRange, value);
-  float toHighlight = smoothstep(uHighlightThreshold, uHighlightThreshold + highRange, value);
-  return mix(mix(uShadowGreen, uMidGreen, toMid), uHighlightGreen, toHighlight);
+  float shadowEnd = max(uShadowThreshold, 0.001);
+  float highlightStart = max(uHighlightThreshold, shadowEnd + 0.01);
+  float shadowMix = smoothstep(0.0, shadowEnd, value);
+  vec3 low = mix(uShadowGreen, uMidGreen, shadowMix);
+  float highlightMix = smoothstep(highlightStart, 1.0, value);
+  return mix(low, uHighlightGreen, highlightMix);
 }
 
 void main() {
   vec2 pixel = gl_FragCoord.xy;
-  float halfLens = uLensSize * 0.5;
-  vec2 squareDelta = abs(pixel - uPointer);
-  float squareDistance = max(squareDelta.x, squareDelta.y);
-  float inside = (1.0 - smoothstep(halfLens - 0.8, halfLens + 0.8, squareDistance)) * uActive;
+  vec3 sceneColor = texture2D(tScene, vUv).rgb;
 
-  if (inside <= 0.0) {
-    gl_FragColor = vec4(0.0);
-    return;
-  }
+  float halfLens = uLensSize * 0.5;
+  vec2 lensDelta = abs(pixel - uPointer);
+  float squareDistance = max(lensDelta.x, lensDelta.y);
+  float inside = (1.0 - smoothstep(halfLens - 0.8, halfLens + 0.8, squareDistance)) * uActive;
 
   float cellSize = max(uCellSize, 2.0);
   vec2 cellId = floor(pixel / cellSize);
   vec2 cellCenter = (cellId + 0.5) * cellSize;
   vec2 localPx = pixel - cellCenter;
+  vec2 cellUv = clamp(cellCenter / uResolution, vec2(0.001), vec2(0.999));
 
-  float timeStep = floor(uTime * max(uGlitchFrequency, 0.01) * 12.0);
-  float rowId = floor(pixel.y / max(cellSize * 0.62, 1.0));
-  float rowNoise = hash21(vec2(rowId, timeStep + 19.0));
-  float glitchBand = step(1.0 - clamp(uGlitchAmount, 0.0, 1.0) * 0.24, rowNoise);
-  float glitchDirection = hash21(vec2(rowId + 7.0, timeStep + 3.0)) - 0.5;
-  float horizontalShift = glitchDirection * uGlitchShift * glitchBand;
+  vec4 subjectHere = texture2D(tSubject, vUv);
+  float subjectMask = smoothstep(0.02, 0.35, subjectHere.a);
 
-  vec2 samplePixel = cellCenter + vec2(horizontalShift, 0.0);
-  vec2 sampleUv = clamp(samplePixel / uResolution, vec2(0.001), vec2(0.999));
-  vec4 scanSample = texture2D(tScan, sampleUv);
-  float subjectMask = smoothstep(0.03, 0.28, scanSample.a);
+  float timeStep = floor(uTime * max(uGlitchFrequency, 0.01) * 10.0);
+  float rowId = floor(pixel.y / max(cellSize * 0.72, 1.0));
+  float rowRandom = hash21(vec2(rowId, timeStep + 17.0));
+  float glitchBand = step(1.0 - clamp(uGlitchAmount, 0.0, 1.0) * 0.20, rowRandom);
+  float glitchSign = hash21(vec2(rowId + 12.0, timeStep + 5.0)) - 0.5;
+  float shiftPx = glitchSign * uGlitchShift * glitchBand;
+  vec2 shiftedUv = clamp(cellUv + vec2(shiftPx / uResolution.x, 0.0), vec2(0.001), vec2(0.999));
 
-  vec2 onePixel = 1.0 / uResolution;
-  float maskL = texture2D(tScan, clamp(sampleUv - vec2(onePixel.x * 2.0, 0.0), vec2(0.001), vec2(0.999))).a;
-  float maskR = texture2D(tScan, clamp(sampleUv + vec2(onePixel.x * 2.0, 0.0), vec2(0.001), vec2(0.999))).a;
-  float maskD = texture2D(tScan, clamp(sampleUv - vec2(0.0, onePixel.y * 2.0), vec2(0.001), vec2(0.999))).a;
-  float maskU = texture2D(tScan, clamp(sampleUv + vec2(0.0, onePixel.y * 2.0), vec2(0.001), vec2(0.999))).a;
-  float silhouetteEdge = clamp(abs(maskR - maskL) + abs(maskU - maskD), 0.0, 1.0);
+  vec4 subjectSample = texture2D(tSubject, shiftedUv);
+  float baseLum = luminance(subjectSample.rgb);
 
-  float centerLum = luminance(scanSample.rgb);
-  float lumL = luminance(texture2D(tScan, clamp(sampleUv - vec2(onePixel.x * 2.5, 0.0), vec2(0.001), vec2(0.999))).rgb);
-  float lumR = luminance(texture2D(tScan, clamp(sampleUv + vec2(onePixel.x * 2.5, 0.0), vec2(0.001), vec2(0.999))).rgb);
-  float lumD = luminance(texture2D(tScan, clamp(sampleUv - vec2(0.0, onePixel.y * 2.5), vec2(0.001), vec2(0.999))).rgb);
-  float lumU = luminance(texture2D(tScan, clamp(sampleUv + vec2(0.0, onePixel.y * 2.5), vec2(0.001), vec2(0.999))).rgb);
-  float detailEdge = clamp((abs(lumR - lumL) + abs(lumU - lumD)) * 2.8, 0.0, 1.0);
-  float edge = clamp((silhouetteEdge + detailEdge) * uEdgeBoost, 0.0, 1.0);
+  vec2 texel = 1.0 / uResolution;
+  float lumL = luminance(texture2D(tSubject, clamp(cellUv - vec2(texel.x * 2.0, 0.0), vec2(0.001), vec2(0.999))).rgb);
+  float lumR = luminance(texture2D(tSubject, clamp(cellUv + vec2(texel.x * 2.0, 0.0), vec2(0.001), vec2(0.999))).rgb);
+  float lumD = luminance(texture2D(tSubject, clamp(cellUv - vec2(0.0, texel.y * 2.0), vec2(0.001), vec2(0.999))).rgb);
+  float lumU = luminance(texture2D(tSubject, clamp(cellUv + vec2(0.0, texel.y * 2.0), vec2(0.001), vec2(0.999))).rgb);
+  float detailEdge = clamp((abs(lumR - lumL) + abs(lumU - lumD)) * 3.2 * uEdgeBoost, 0.0, 1.0);
 
-  float shapedLum = clamp(centerLum * 1.38 + edge * 0.36, 0.0, 1.0);
+  float contrast = mix(1.22, 1.55, 1.0 - clamp(uSurfaceRoughness, 0.0, 1.0));
+  float shapedLum = clamp(baseLum * contrast + detailEdge * 0.34, 0.0, 1.0);
   vec3 palette = scanPalette(shapedLum);
 
-  float seed = hash21(cellId + vec2(13.1, 71.7));
-  float density = clamp(uPointDensity + shapedLum * 0.06 + edge * 0.12, 0.0, 1.0);
-  float keepPoint = step(seed, density);
+  float densitySeed = hash21(cellId + vec2(13.7, 91.3));
+  float density = clamp(uPointDensity + detailEdge * 0.08 + shapedLum * 0.04, 0.0, 1.0);
+  float keepPoint = step(densitySeed, density);
 
-  float pointRadius = clamp(uPointSize, 0.35, cellSize * 0.48);
+  float radius = clamp(uPointSize, 0.35, cellSize * 0.48);
   float pointDistance = length(localPx);
-  float pointAA = max(fwidth(pointDistance), 0.7);
-  float pointShape = 1.0 - smoothstep(pointRadius, pointRadius + pointAA, pointDistance);
+  float pointShape = 1.0 - smoothstep(radius, radius + 0.9, pointDistance);
 
-  float flickerSeed = hash21(cellId * 1.37 + vec2(floor(uTime * 10.0), floor(uTime * 6.0) + 33.0));
-  float flicker = mix(1.0 - uFlicker * 0.35, 1.0 + uFlicker, flickerSeed);
+  float flickerSeed = hash21(cellId + vec2(floor(uTime * 9.0), floor(uTime * 5.0) + 41.0));
+  float flicker = mix(1.0 - uFlicker * 0.28, 1.0 + uFlicker, flickerSeed);
 
-  float rareSeed = hash21(cellId + vec2(211.7, 43.2));
-  float twinkle = 0.5 + 0.5 * sin(uTime * 7.0 + rareSeed * 31.4159);
-  float sparkle = smoothstep(0.975, 1.0, rareSeed) * twinkle;
+  float sparkleSeed = hash21(cellId + vec2(241.0, 67.0));
+  float sparklePulse = 0.5 + 0.5 * sin(uTime * 6.5 + sparkleSeed * 28.0);
+  float sparkle = smoothstep(0.978, 1.0, sparkleSeed) * sparklePulse;
 
-  float fineLine = 0.5 + 0.5 * sin(pixel.y * 3.14159265);
-  float scanlineShade = mix(1.0, mix(0.72, 1.05, fineLine), uScanlines);
+  float scanWave = 0.5 + 0.5 * sin(pixel.y * 3.14159265);
+  float scanShade = mix(1.0, mix(0.76, 1.04, scanWave), uScanlines);
 
-  float brokenSegment = step(0.55, hash21(vec2(floor(pixel.x / 28.0), rowId + timeStep * 3.0)));
-  float rowCell = mod(pixel.y, max(cellSize * 0.62, 1.0));
-  float streakShape = 1.0 - smoothstep(0.25, 1.25, abs(rowCell - 0.5));
-  float streak = glitchBand * brokenSegment * streakShape;
+  vec3 pointColor = palette * (0.48 + shapedLum * 1.20 + detailEdge * 0.45) * flicker * scanShade;
+  pointColor += uHighlightGreen * sparkle * (0.7 + shapedLum) * 1.65;
 
-  vec3 pointColor = palette * (0.5 + shapedLum * 1.15 + edge * 0.55) * flicker * scanlineShade;
-  pointColor += uHighlightGreen * sparkle * (0.75 + shapedLum) * 1.8;
+  float effectMask = inside * subjectMask;
 
-  float luminousPoints = pointShape * keepPoint * subjectMask;
-  float pointAlpha = clamp(luminousPoints * (0.55 + uEffectIntensity * 0.35), 0.0, 0.96);
-  float textureAlpha = subjectMask * shapedLum * 0.08 * uEffectIntensity;
-  float streakAlpha = streak * subjectMask * uGlitchAmount * 0.5;
+  vec3 scanBase = mix(sceneColor, uShadowGreen * (0.10 + shapedLum * 0.16), clamp(uBaseDarken, 0.0, 1.0));
+  float luminous = pointShape * keepPoint * subjectMask;
+  scanBase += pointColor * luminous * uEffectIntensity;
 
-  float windowAlpha = inside * uBaseDarken * 0.34;
-  vec3 windowColor = uShadowGreen * (0.55 + subjectMask * 0.18);
+  float microNoise = hash21(pixel + floor(uTime * 16.0));
+  scanBase += palette * subjectMask * shapedLum * microNoise * 0.035 * uEffectIntensity;
+
+  float brokenSegment = step(0.62, hash21(vec2(floor(pixel.x / 30.0), rowId + timeStep * 2.0)));
+  float rowPhase = mod(pixel.y, max(cellSize * 0.72, 1.0));
+  float streakShape = 1.0 - smoothstep(0.15, 1.15, abs(rowPhase - 0.5));
+  float streak = glitchBand * brokenSegment * streakShape * subjectMask;
+  scanBase += uHighlightGreen * streak * uGlitchAmount * (0.16 + shapedLum * 0.55);
+
+  vec3 color = mix(sceneColor, scanBase, effectMask);
 
   float borderDistance = abs(squareDistance - halfLens);
-  float border = (1.0 - smoothstep(0.5, 1.8, borderDistance)) * uActive;
-  float borderAlpha = border * uBorderOpacity;
+  float border = (1.0 - smoothstep(0.45, 1.65, borderDistance)) * uActive;
+  color += uHighlightGreen * border * uBorderOpacity * 0.55;
 
-  vec3 overlayColor = windowColor;
-  float overlayAlpha = windowAlpha;
-
-  float pointMix = pointAlpha * inside;
-  overlayColor = mix(overlayColor, pointColor, pointMix);
-  overlayAlpha = max(overlayAlpha, pointMix);
-
-  float micro = hash21(pixel + floor(uTime * 18.0));
-  float microAlpha = textureAlpha * micro * inside;
-  overlayColor = mix(overlayColor, palette, microAlpha);
-  overlayAlpha = max(overlayAlpha, microAlpha);
-
-  float glitchMix = streakAlpha * inside;
-  overlayColor = mix(overlayColor, uHighlightGreen, glitchMix);
-  overlayAlpha = max(overlayAlpha, glitchMix);
-
-  overlayColor = mix(overlayColor, uHighlightGreen, borderAlpha);
-  overlayAlpha = max(overlayAlpha, borderAlpha);
-
-  gl_FragColor = vec4(overlayColor, clamp(overlayAlpha, 0.0, 0.98));
+  gl_FragColor = vec4(color, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }
@@ -217,62 +197,30 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
   const params: LensParams = { ...DEFAULT_LENS }
   const size = renderer.getDrawingBufferSize(new THREE.Vector2())
 
-  const scanTarget = new THREE.WebGLRenderTarget(size.x, size.y, {
-    type: THREE.UnsignedByteType,
+  const makeTarget = () => new THREE.WebGLRenderTarget(size.x, size.y, {
+    type: THREE.HalfFloatType,
     format: THREE.RGBAFormat,
     colorSpace: THREE.LinearSRGBColorSpace,
     minFilter: THREE.LinearFilter,
     magFilter: THREE.LinearFilter,
     depthBuffer: true,
     stencilBuffer: false,
-    samples: 0,
+    samples: 4,
   })
-  scanTarget.texture.name = 'ScanLens.subject'
+
+  const sceneTarget = makeTarget()
+  const subjectTarget = makeTarget()
+  sceneTarget.texture.name = 'ScanLens.scene'
+  subjectTarget.texture.name = 'ScanLens.subject'
 
   const pointerCss = new THREE.Vector2(-1, -1)
   const subjectMeshes = new Set<THREE.Mesh>()
-  const materialCache = new Map<THREE.Material, THREE.MeshPhysicalMaterial>()
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
   let pointerActive = false
 
-  const scanMaterialFor = (source: THREE.Material) => {
-    const cached = materialCache.get(source)
-    if (cached) return cached
-
-    const original = source as THREE.MeshStandardMaterial
-    const material = new THREE.MeshPhysicalMaterial({
-      color: '#36e69a',
-      map: original.map ?? null,
-      metalness: 0.68,
-      roughness: params.surfaceRoughness,
-      envMapIntensity: 2.1,
-      emissive: new THREE.Color('#062f24'),
-      emissiveIntensity: 0.18,
-      clearcoat: 0.14,
-      clearcoatRoughness: 0.32,
-      normalMap: original.normalMap ?? null,
-      bumpMap: original.bumpMap ?? null,
-      bumpScale: original.bumpScale ?? 1,
-      aoMap: original.aoMap ?? null,
-      aoMapIntensity: original.aoMapIntensity ?? 1,
-      alphaMap: original.alphaMap ?? null,
-      alphaTest: source.alphaTest,
-      transparent: source.transparent,
-      opacity: source.opacity,
-      side: source.side,
-      displacementMap: original.displacementMap ?? null,
-      displacementScale: original.displacementScale ?? 1,
-      displacementBias: original.displacementBias ?? 0,
-    })
-    if (original.normalScale) material.normalScale.copy(original.normalScale)
-    if (original.normalMapType !== undefined) material.normalMapType = original.normalMapType
-    material.name = 'Green scan surface'
-    materialCache.set(source, material)
-    return material
-  }
-
   const uniforms = {
-    tScan: { value: scanTarget.texture },
+    tScene: { value: sceneTarget.texture },
+    tSubject: { value: subjectTarget.texture },
     uResolution: { value: size.clone() },
     uPointer: { value: new THREE.Vector2(-1e6, -1e6) },
     uLensSize: { value: params.lensSize },
@@ -295,18 +243,16 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     uBaseDarken: { value: params.baseDarken },
     uEffectIntensity: { value: params.effectIntensity },
     uBorderOpacity: { value: params.borderOpacity },
+    uSurfaceRoughness: { value: params.surfaceRoughness },
   }
 
   const compositeMaterial = new THREE.ShaderMaterial({
-    name: 'Green scan lens overlay',
+    name: 'Green scan square composite',
     uniforms,
     vertexShader: VERTEX,
     fragmentShader: FRAGMENT,
-    transparent: true,
-    blending: THREE.NormalBlending,
     depthTest: false,
     depthWrite: false,
-    toneMapped: true,
   })
   const quad = new FullScreenQuad(compositeMaterial)
 
@@ -324,11 +270,11 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
   }
 
   const resize = () => {
-    renderer.getDrawingBufferSize(size)
+    syncSize()
     const width = Math.max(1, Math.floor(size.x))
     const height = Math.max(1, Math.floor(size.y))
-    scanTarget.setSize(width, height)
-    syncSize()
+    sceneTarget.setSize(width, height)
+    subjectTarget.setSize(width, height)
   }
 
   const setPointer = (x: number, y: number) => {
@@ -349,6 +295,7 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
   }
 
   const syncUniforms = (elapsed: number) => {
+    uniforms.uActive.value = 1
     uniforms.uTime.value = reducedMotion.matches ? 0 : elapsed * params.animSpeed
     uniforms.uPointDensity.value = params.pointDensity
     uniforms.uFlicker.value = params.flicker
@@ -364,51 +311,45 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     uniforms.uBaseDarken.value = params.baseDarken
     uniforms.uEffectIntensity.value = params.effectIntensity
     uniforms.uBorderOpacity.value = params.borderOpacity
-    for (const material of materialCache.values()) material.roughness = params.surfaceRoughness
+    uniforms.uSurfaceRoughness.value = params.surfaceRoughness
     syncSize()
   }
 
   const render = (scene: THREE.Scene, camera: THREE.Camera, elapsed: number) => {
     const active = pointerActive && params.enabled
-
-    renderer.setRenderTarget(null)
-    renderer.render(scene, camera)
-
-    if (!active || subjectMeshes.size === 0) return
+    if (!active || subjectMeshes.size === 0) {
+      renderer.setRenderTarget(null)
+      renderer.render(scene, camera)
+      return
+    }
 
     syncUniforms(elapsed)
-    uniforms.uActive.value = 1
 
     const previousTarget = renderer.getRenderTarget()
     const previousBackground = scene.background
     const previousShadowAutoUpdate = renderer.shadowMap.autoUpdate
-    const previousClearAlpha = renderer.getClearAlpha()
     const previousClearColor = renderer.getClearColor(new THREE.Color()).clone()
-    const previousAutoClear = renderer.autoClear
+    const previousClearAlpha = renderer.getClearAlpha()
     const hiddenMeshes: Array<[THREE.Mesh, boolean]> = []
-    const swappedMaterials: Array<[THREE.Mesh, THREE.Material | THREE.Material[]]> = []
 
     try {
+      renderer.setRenderTarget(sceneTarget)
+      renderer.render(scene, camera)
+
       renderer.shadowMap.autoUpdate = false
       scene.traverse((object) => {
         if (!(object instanceof THREE.Mesh)) return
-        if (subjectMeshes.has(object)) {
-          const original = object.material
-          swappedMaterials.push([object, original])
-          object.material = Array.isArray(original) ? original.map(scanMaterialFor) : scanMaterialFor(original)
-        } else {
-          hiddenMeshes.push([object, object.visible])
-          object.visible = false
-        }
+        if (subjectMeshes.has(object)) return
+        hiddenMeshes.push([object, object.visible])
+        object.visible = false
       })
 
       scene.background = null
       renderer.setClearColor(0x000000, 0)
-      renderer.setRenderTarget(scanTarget)
+      renderer.setRenderTarget(subjectTarget)
       renderer.clear(true, true, true)
       renderer.render(scene, camera)
     } finally {
-      for (const [mesh, material] of swappedMaterials) mesh.material = material
       for (const [mesh, visible] of hiddenMeshes) mesh.visible = visible
       scene.background = previousBackground
       renderer.shadowMap.autoUpdate = previousShadowAutoUpdate
@@ -416,19 +357,12 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
       renderer.setRenderTarget(previousTarget)
     }
 
-    renderer.setRenderTarget(null)
-    renderer.autoClear = false
-    try {
-      quad.render(renderer)
-    } finally {
-      renderer.autoClear = previousAutoClear
-    }
+    quad.render(renderer)
   }
 
   const dispose = () => {
-    scanTarget.dispose()
-    for (const material of materialCache.values()) material.dispose()
-    materialCache.clear()
+    sceneTarget.dispose()
+    subjectTarget.dispose()
     compositeMaterial.dispose()
     quad.dispose()
   }
