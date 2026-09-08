@@ -70,21 +70,44 @@ export function attachDebugMenu(options: DebugOptions) {
   ).name('Reset lights')
 
   if (lens) {
-    const folder = gui.addFolder('Emerald Lens')
+    const folder = gui.addFolder('Scan Lens')
     folder.add(lens, 'enabled').name('enabled')
-    folder.add(lens, 'lensSize', 120, 600, 1).name('square size')
-    folder.add(lens, 'roughness', 0.16, 0.6, 0.01).name('roughness')
-    folder.add(lens, 'brightness', 0.5, 3, 0.01).name('reflections')
-    folder.add(lens, 'sparkle', 0, 2, 0.01).name('gold glints')
-    folder.add(lens, 'grain', 0, 0.4, 0.01).name('grain')
-    folder.add(lens, 'interference', 0, 1, 0.01).name('horizontal lines')
-    folder.add(lens, 'animSpeed', 0, 2, 0.01).name('animation speed')
+    folder.add(lens, 'lensSize', 120, 600, 1).name('lens size')
+
+    const points = folder.addFolder('Reconstruction')
+    points.add(lens, 'cellSize', 2.5, 10, 0.1).name('cell size')
+    points.add(lens, 'pointSize', 0.4, 3.5, 0.05).name('point size')
+    points.add(lens, 'pointDensity', 0.2, 1, 0.01).name('point density')
+    points.add(lens, 'flicker', 0, 0.8, 0.01).name('flicker')
+    points.add(lens, 'edgeBoost', 0, 3, 0.01).name('edge boost')
+    points.add(lens, 'surfaceRoughness', 0.12, 0.7, 0.01).name('surface roughness')
+    points.open()
+
+    const glitch = folder.addFolder('Glitch')
+    glitch.add(lens, 'glitchAmount', 0, 1, 0.01).name('glitch amount')
+    glitch.add(lens, 'glitchFrequency', 0.05, 2, 0.01).name('glitch frequency')
+    glitch.add(lens, 'glitchShift', 0, 40, 0.5).name('glitch shift')
+    glitch.add(lens, 'scanlines', 0, 1, 0.01).name('scanlines')
+    glitch.add(lens, 'animSpeed', 0, 2, 0.01).name('animation speed')
+
+    const color = folder.addFolder('Color')
+    color.addColor(lens, 'shadowGreen').name('shadow')
+    color.addColor(lens, 'midGreen').name('midtone')
+    color.addColor(lens, 'highlightGreen').name('highlight')
+    color.add(lens, 'shadowThreshold', 0.05, 0.6, 0.01).name('shadow threshold')
+    color.add(lens, 'highlightThreshold', 0.4, 0.95, 0.01).name('highlight threshold')
+    color.open()
+
+    const mix = folder.addFolder('Window')
+    mix.add(lens, 'baseDarken', 0, 1, 0.01).name('base darken')
+    mix.add(lens, 'effectIntensity', 0.2, 2.5, 0.01).name('effect intensity')
+    mix.add(lens, 'borderOpacity', 0, 1, 0.01).name('border opacity')
 
     folder.add(
       {
         reset: () => {
           Object.assign(lens, DEFAULT_LENS)
-          for (const controller of folder.controllers) controller.updateDisplay()
+          for (const controller of folder.controllersRecursive()) controller.updateDisplay()
         },
       },
       'reset',
