@@ -3,6 +3,7 @@ import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js'
 
 export const DEFAULT_CORRUPTION = {
   enabled: true, squareSize: 300, colorStrength: 0.72, colorDensity: 0.38,
+  colorMotionSpeed: 0.75, colorMotionTravel: 24, colorMovingDensity: 0.7,
   scanlineStrength: 0.22, scannerSweepStrength: 0.18, scannerSpeed: 0.35, bandCoverage: 0.22,
   bandOffsetStrength: 12, tearAmount: 0.3, rgbSplitAmount: 0.65,
   noiseAmount: 0, blendAmount: 0.7, animationSpeed: 1,
@@ -29,6 +30,9 @@ uniform vec2 uPointer;
 uniform vec2 uSquareSize;
 uniform float uColorStrength;
 uniform float uColorDensity;
+uniform float uColorMotionSpeed;
+uniform float uColorMotionTravel;
+uniform float uColorMovingDensity;
 uniform float uPixelRatio;
 uniform float uTime;
 uniform float uScanlineStrength;
@@ -137,11 +141,26 @@ void main() {
     + vec3(0.14, 0.72, 0.52) * sweep;
 
   // Short colored fragments sit beside damaged fragments instead of replacing the scanner.
-  float fragmentId = floor(surfaceX * 6.0);
-  float colorSeed = row * 13.0 + fragmentId * 43.0 + state * 83.0;
-  float fragmentX = fract(surfaceX * 6.0);
+  // Each surface row has its own clock, phase, travel and direction.
+  // Advect the fragment coordinates so the same colored fragment visibly travels.
+  // No global state reseed: it must not merely blink in a different place each second.
+  float rowSeed = row * 13.0 + 311.0;
+  float rowSpeed = 0.55 + boxHash(rowSeed + 1.0) * 1.1;
+  float rowPhase = boxHash(rowSeed + 2.0) * 6.2831853;
+  float rowDirection = boxHash(rowSeed + 3.0) < 0.5 ? -1.0 : 1.0;
+  float moving = step(1.0 - uColorMovingDensity, boxHash(rowSeed + 4.0));
+  float travel = moving * uColorMotionTravel / 300.0 * (0.5 + boxHash(rowSeed + 5.0) * 0.5);
+  float motion = sin(uTime * uColorMotionSpeed * rowSpeed + rowPhase) * travel * rowDirection;
+  float fragmentCoordinate = (surfaceX - motion) * 6.0;
+  float fragmentId = floor(fragmentCoordinate);
+  float colorSeed = rowSeed + fragmentId * 43.0;
+  float fragmentX = fract(fragmentCoordinate);
   float fragmentWindow = step(0.14, fragmentX) * step(fragmentX, 0.72);
-  float colored = step(1.0 - uColorDensity, boxHash(colorSeed)) * fragmentWindow * activity;
+  float rowSelected = step(1.0 - uBandCoverage, boxHash(rowSeed + 6.0));
+  float rowClock = fract(uTime * (0.3 + boxHash(rowSeed + 7.0) * 0.4) + boxHash(rowSeed + 8.0));
+  float rowPulse = smoothstep(0.0, 0.12, rowClock) * (1.0 - smoothstep(0.8, 1.0, rowClock));
+  float colored = step(1.0 - uColorDensity, boxHash(colorSeed))
+    * fragmentWindow * rowSelected * rowPulse;
   float hue = boxHash(colorSeed + 19.0);
   vec3 accent = hue < 0.24 ? vec3(1.0, 0.01, 0.65)
     : hue < 0.48 ? vec3(0.01, 0.85, 1.0)
@@ -191,7 +210,8 @@ export function createBoxCorruption(renderer: THREE.WebGLRenderer) {
   }
   const keys = ['scanlineStrength', 'scannerSweepStrength', 'scannerSpeed',
     'bandCoverage', 'bandOffsetStrength', 'tearAmount',
-    'rgbSplitAmount', 'noiseAmount', 'blendAmount', 'colorStrength', 'colorDensity'] as const
+    'rgbSplitAmount', 'noiseAmount', 'blendAmount', 'colorStrength', 'colorDensity',
+    'colorMotionSpeed', 'colorMotionTravel', 'colorMovingDensity'] as const
   for (const key of keys) uniforms['u' + key[0].toUpperCase() + key.slice(1)] = { value: params[key] }
   const material = new THREE.ShaderMaterial({
     name: 'Rigid box surface corruption', uniforms, vertexShader: VERTEX, fragmentShader: FRAGMENT,
