@@ -97,6 +97,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   applyLook()
 
   const lens = createTechnicalLens(renderer)
+  lens.setSubject(subject)
   const clock = new THREE.Clock()
 
   const controls = new OrbitControls(camera, canvas)
@@ -121,6 +122,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     scene.remove(subject)
     subject = next
     scene.add(subject)
+    lens.setSubject(subject)
     fitDesk(desk, subject, look.deskSize)
     setSource(label)
   }
