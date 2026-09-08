@@ -134,7 +134,7 @@ export function attachDebugMenu(options: DebugOptions) {
   }
 
   if (crt) {
-    const folder = gui.addFolder('Analog CRT · final frame')
+    const folder = gui.addFolder('Analog CRT · square only')
     folder.add(crt, 'enabled')
     folder.add(crt, 'strength', 0, 1, 0.01)
     folder.add(crt, 'lineSpacing', 1.5, 8, 0.1).name('vertical line spacing')

@@ -45,6 +45,8 @@ void main() {
 const FRAGMENT = /* glsl */ `
 uniform sampler2D tFrame;
 uniform vec2 uResolution;
+uniform vec2 uLensCenter;
+uniform float uLensSize;
 uniform float uPixelRatio;
 uniform float uTime;
 uniform float uBurst;
@@ -75,7 +77,9 @@ float crtZone(float y, float center, float width) {
 
 vec3 crtRead(float x, float y) {
   // Black border, never repeat or clamp edge pixels into a long smear.
-  if (x < 0.0 || x > 1.0) return vec3(0.0);
+  float left = max(0.0, (uLensCenter.x - uLensSize * 0.5) / uResolution.x);
+  float right = min(1.0, (uLensCenter.x + uLensSize * 0.5) / uResolution.x);
+  if (x < left || x > right) return vec3(0.0);
   vec3 color = texture2D(tFrame, vec2(x, y)).rgb;
   float position = x * uResolution.x / max(uLineSpacing * uPixelRatio, 1.0);
   float irregular = (crtNoise(position * 0.09) - 0.5) * uLineIrregularity;
@@ -88,6 +92,14 @@ vec3 crtRead(float x, float y) {
 }
 
 void main() {
+  vec2 distanceToCenter = abs(gl_FragCoord.xy - uLensCenter);
+  if (max(distanceToCenter.x, distanceToCenter.y) >= uLensSize * 0.5) {
+    // Preserve the source frame exactly outside the cursor window.
+    gl_FragColor = texture2D(tFrame, vUv);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+    return;
+  }
   float y = vUv.y;
   float heldTime = floor(uTime * 5.0);
   float steppedY = floor(y * uResolution.y / max(uRowStep * uPixelRatio, 1.0))
@@ -131,6 +143,7 @@ export function createAnalogCRT(renderer: THREE.WebGLRenderer) {
   target.texture.name = 'AnalogCRT.finalFrame'
   const uniforms: Record<string, THREE.IUniform> = {
     tFrame: { value: target.texture }, uResolution: { value: size },
+    uLensCenter: { value: new THREE.Vector2() }, uLensSize: { value: 0 },
     uPixelRatio: { value: renderer.getPixelRatio() },
     uTime: { value: 0 }, uBurst: { value: 0 }, uSeed: { value: 1 },
   }
@@ -150,9 +163,12 @@ export function createAnalogCRT(renderer: THREE.WebGLRenderer) {
     target.setSize(Math.max(1, size.x), Math.max(1, size.y))
     uniforms.uPixelRatio.value = renderer.getPixelRatio()
   }
-  const render = (drawFrame: () => void, elapsed: number) => {
+  const render = (drawFrame: () => void, elapsed: number,
+    window: { center: THREE.Vector2; size: number; active: boolean }) => {
     const state = signal(elapsed, params, reducedMotion.matches)
-    if (!params.enabled) { drawFrame(); return }
+    if (!params.enabled || !window.active) { drawFrame(); return }
+    uniforms.uLensCenter.value.copy(window.center)
+    uniforms.uLensSize.value = window.size
     uniforms.uTime.value = reducedMotion.matches ? 0 : elapsed
     uniforms.uBurst.value = state.envelope
     uniforms.uSeed.value = state.seed

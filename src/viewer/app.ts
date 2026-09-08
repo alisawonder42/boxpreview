@@ -201,7 +201,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     canvas.dataset.pointer = `${pointerNDC.x.toFixed(3)},${pointerNDC.y.toFixed(3)}`
     canvas.dataset.pointerPx = `${pointerPixels.x.toFixed(0)},${pointerPixels.y.toFixed(0)}`
     const elapsed = clock.getElapsedTime()
-    crt.render(() => lens.render(scene, camera, elapsed), elapsed)
+    crt.render(() => lens.render(scene, camera, elapsed), elapsed, lens.getWindow())
   }
   loop()
   document.body.classList.add('ready')
