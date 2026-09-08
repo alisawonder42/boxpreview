@@ -53,6 +53,11 @@ subject or across a sharp face boundary fall back to the original pixel.
 
 The original scene renders directly first. Only affected interior pixels are then
 overwritten with an opaque blend, preserving the background and antialiased outline.
+The pattern is anchored in subject-local coordinates reconstructed from visible
+depth. Bands, color fragments, scanlines and texture offsets follow the box faces
+through orbit and rotation; the cursor only reveals them. Offset controls use
+nominal surface pixels (300 across a face), independent of zoom.
+
 The fixed 300px cursor square intersects the object mask; only their overlap is
 affected. Pointer leave disables the overlay. Drag/orbit, reset, resize, and model replacement remain
 available. Reduced-motion preferences freeze the corruption pattern.
