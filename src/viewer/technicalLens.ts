@@ -16,6 +16,8 @@ export type LensParams = {
   shadowGreen: string
   midGreen: string
   highlightGreen: string
+  highlightGold: string
+  highlightWhite: string
   shadowThreshold: number
   highlightThreshold: number
   baseDarken: number
@@ -26,6 +28,7 @@ export type LensParams = {
   bloomStrength: number
   bloomRadius: number
   bloomThreshold: number
+  grainStrength: number
 }
 
 export const DEFAULT_LENS: LensParams = {
@@ -42,7 +45,9 @@ export const DEFAULT_LENS: LensParams = {
   scanlines: 0.28,
   shadowGreen: '#062f24',
   midGreen: '#1bd671',
-  highlightGreen: '#c6ffe3',
+  highlightGreen: '#85edc6',
+  highlightGold: '#efda94',
+  highlightWhite: '#f4fff9',
   shadowThreshold: 0.28,
   highlightThreshold: 0.72,
   baseDarken: 0.42,
@@ -53,6 +58,7 @@ export const DEFAULT_LENS: LensParams = {
   bloomStrength: 0.32,
   bloomRadius: 5,
   bloomThreshold: 0.62,
+  grainStrength: 0.045,
 }
 
 const VERTEX = /* glsl */ `
@@ -83,6 +89,8 @@ uniform float uScanlines;
 uniform vec3 uShadowGreen;
 uniform vec3 uMidGreen;
 uniform vec3 uHighlightGreen;
+uniform vec3 uHighlightGold;
+uniform vec3 uHighlightWhite;
 uniform float uShadowThreshold;
 uniform float uHighlightThreshold;
 uniform float uBaseDarken;
@@ -113,8 +121,10 @@ vec3 scanPalette(float value) {
   float highlightStart = max(uHighlightThreshold, shadowEnd + 0.01);
   float shadowMix = smoothstep(0.0, shadowEnd, value);
   vec3 low = mix(uShadowGreen, uMidGreen, shadowMix);
-  float highlightMix = smoothstep(highlightStart, 1.0, value);
-  return mix(low, uHighlightGreen, highlightMix);
+  float highlightPosition = clamp((value - highlightStart) / max(1.0 - highlightStart, 0.01), 0.0, 1.0);
+  vec3 color = mix(low, uHighlightGreen, smoothstep(0.0, 0.35, highlightPosition));
+  color = mix(color, uHighlightGold, smoothstep(0.35, 0.75, highlightPosition));
+  return mix(color, uHighlightWhite, smoothstep(0.75, 1.0, highlightPosition));
 }
 
 void main() {
@@ -180,7 +190,7 @@ void main() {
   float scanShade = mix(1.0, mix(0.76, 1.04, scanWave), uScanlines);
 
   vec3 pointColor = palette * (0.48 + shapedLum * 1.20 + detailEdge * 0.45) * flicker * scanShade;
-  pointColor += uHighlightGreen * sparkle * (0.7 + shapedLum) * 1.65;
+  pointColor += uHighlightWhite * sparkle * (0.7 + shapedLum) * 1.65;
 
   float effectMask = inside * subjectMask;
 
@@ -222,6 +232,8 @@ uniform float uLensSize;
 uniform float uBloomStrength;
 uniform float uBloomRadius;
 uniform float uBloomThreshold;
+uniform float uGrainStrength;
+uniform float uTime;
 varying vec2 vUv;
 
 vec3 scanBright(vec2 uv) {
@@ -246,6 +258,11 @@ void main() {
   gl_FragColor = vec4(texture2D(tEffect, vUv).rgb + glow * uBloomStrength * windowMask, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
+  // Display-space monochrome grain, after bloom and tone mapping.
+  // uTime stops for reduced-motion preferences; the grain then stays static.
+  float grain = fract(sin(dot(floor(gl_FragCoord.xy) + floor(uTime * 18.0), vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
+  float grainMask = texture2D(tSubject, vUv).a * windowMask;
+  gl_FragColor.rgb = clamp(gl_FragColor.rgb + grain * uGrainStrength * grainMask, 0.0, 1.0);
 }
 `
 
@@ -299,6 +316,8 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     uShadowGreen: { value: new THREE.Color(params.shadowGreen) },
     uMidGreen: { value: new THREE.Color(params.midGreen) },
     uHighlightGreen: { value: new THREE.Color(params.highlightGreen) },
+    uHighlightGold: { value: new THREE.Color(params.highlightGold) },
+    uHighlightWhite: { value: new THREE.Color(params.highlightWhite) },
     uShadowThreshold: { value: params.shadowThreshold },
     uHighlightThreshold: { value: params.highlightThreshold },
     uBaseDarken: { value: params.baseDarken },
@@ -309,6 +328,7 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     uBloomStrength: { value: params.bloomStrength },
     uBloomRadius: { value: params.bloomRadius },
     uBloomThreshold: { value: params.bloomThreshold },
+    uGrainStrength: { value: params.grainStrength },
   }
 
   const compositeMaterial = new THREE.ShaderMaterial({
@@ -401,6 +421,8 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     uniforms.uShadowGreen.value.set(params.shadowGreen)
     uniforms.uMidGreen.value.set(params.midGreen)
     uniforms.uHighlightGreen.value.set(params.highlightGreen)
+    uniforms.uHighlightGold.value.set(params.highlightGold)
+    uniforms.uHighlightWhite.value.set(params.highlightWhite)
     uniforms.uShadowThreshold.value = params.shadowThreshold
     uniforms.uHighlightThreshold.value = params.highlightThreshold
     uniforms.uBaseDarken.value = params.baseDarken
@@ -409,6 +431,7 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     uniforms.uSurfaceRoughness.value = params.surfaceRoughness
     uniforms.uBloomStrength.value = params.bloomStrength
     uniforms.uBloomThreshold.value = params.bloomThreshold
+    uniforms.uGrainStrength.value = params.grainStrength
     syncSize()
   }
 
