@@ -72,6 +72,9 @@ export function attachDebugMenu(options: DebugOptions) {
   if (corruption) {
     const folder = gui.addFolder('Box · horizontal corruption')
     folder.add(corruption, 'enabled')
+    folder.add(corruption, 'squareSize', 80, 500, 1).name('cursor square · px')
+    folder.add(corruption, 'colorStrength', 0, 1, 0.01).name('color strength')
+    folder.add(corruption, 'colorDensity', 0, 1, 0.01).name('colored fragments')
     folder.add(corruption, 'scanlineStrength', 0, 0.5, 0.01).name('scanlines')
     folder.add(corruption, 'bandCoverage', 0.05, 0.35, 0.01).name('band coverage')
     folder.add(corruption, 'bandOffsetStrength', 0, 40, 0.5).name('strip offset · px')

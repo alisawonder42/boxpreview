@@ -46,6 +46,7 @@ function setup(pixelRatio = 1) {
   scene.add(subject, floor)
   const corruption = createBoxCorruption(renderer)
   corruption.setSubject(subject)
+  corruption.setPointer(400, 300)
   return { renderer, corruption, scene, subject, floor, calls }
 }
 
@@ -95,6 +96,8 @@ for (const ratio of [1, 1.5, 2]) {
   assert.equal(uniforms.tScene.value, calls[1].target.texture)
   assert.equal(uniforms.tMask.value, calls[2].target.texture)
   assert.deepEqual(uniforms.uResolution.value.toArray(), [800 * ratio, 600 * ratio])
+  assert.deepEqual(uniforms.uPointer.value.toArray(), [400 * ratio, 300 * ratio])
+  assert.deepEqual(uniforms.uSquareSize.value.toArray(), [300 * ratio, 300 * ratio])
   assert.equal(subject.material, original)
   assert.equal(floor.visible, true)
   assert.equal(scene.background.getHex(), 0xffffff)
@@ -128,6 +131,11 @@ for (const ratio of [1, 1.5, 2]) {
   assert.equal(renderer.getRenderTarget(), destination)
   assert.equal(renderer.autoClear, true)
   assert.equal(renderer.shadowMap.autoUpdate, true)
+  renderer.render = render
+  calls.length = 0
+  corruption.clearPointer()
+  corruption.render(scene, camera, 7)
+  assert.equal(calls.length, 1, 'pointer leave renders only the clean scene')
   corruption.dispose()
   destination.dispose()
 }
