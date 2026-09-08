@@ -621,5 +621,10 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
   }
 
   resize()
-  return { params, render, setPointer, setPointerActive, setSubject, resize, dispose }
+  const getWindow = () => {
+    syncSize()
+    return { center: uniforms.uPointer.value, size: uniforms.uLensSize.value,
+      active: pointerActive && params.enabled && subjectMeshes.size > 0 }
+  }
+  return { params, render, setPointer, setPointerActive, setSubject, resize, dispose, getWindow }
 }
