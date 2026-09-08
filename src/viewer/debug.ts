@@ -103,6 +103,11 @@ export function attachDebugMenu(options: DebugOptions) {
     mix.add(lens, 'effectIntensity', 0.2, 2.5, 0.01).name('effect intensity')
     mix.add(lens, 'borderOpacity', 0, 1, 0.01).name('border opacity')
 
+    const bloom = folder.addFolder('Bloom')
+    bloom.add(lens, 'bloomStrength', 0, 1, 0.01).name('strength')
+    bloom.add(lens, 'bloomRadius', 1, 14, 0.5).name('radius')
+    bloom.add(lens, 'bloomThreshold', 0.2, 0.95, 0.01).name('threshold')
+
     folder.add(
       {
         reset: () => {

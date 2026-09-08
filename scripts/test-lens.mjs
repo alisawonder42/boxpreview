@@ -27,7 +27,9 @@ function setup(pixelRatio = 1) {
     getClearAlpha: () => clearAlpha,
     setClearColor: (color, alpha) => { clearColor = new THREE.Color(color); clearAlpha = alpha },
     clear: () => {},
-    render: (object) => calls.push({ object, target, autoClear: renderer.autoClear, scissorTest, scissor: scissor.clone() }),
+    render: (object) => calls.push({ object, target, autoClear: renderer.autoClear, scissorTest, scissor: scissor.clone(),
+      materials: object instanceof THREE.Scene ? object.children.filter(child => child instanceof THREE.Mesh).map(mesh => mesh.material) : [],
+    }),
   }
   const scene = new THREE.Scene()
   scene.background = new THREE.Color('white')
@@ -48,13 +50,17 @@ for (const ratio of [1, 1.5, 2]) {
   lens.setPointer(400, 300)
   lens.setPointerActive(true)
   lens.render(scene, camera, 1)
-  assert.equal(calls.length, 4)
+  assert.equal(calls.length, 5)
   assert.equal(calls[0].target, null, 'original scene is rendered directly first')
   for (const call of calls.slice(1, 3)) {
     assert.equal(call.target.texture.type, THREE.UnsignedByteType)
     assert.equal(call.target.samples, 0)
   }
-  const overlay = calls[3]
+  assert.ok(calls[2].materials[0] instanceof THREE.MeshNormalMaterial, 'surface signal uses normals instead of print')
+  assert.equal(calls[2].materials[0].map, undefined, 'surface material has no albedo map')
+  assert.equal(calls[3].target.texture.name, 'ScanLens.effect', 'bloom samples the effect rendered to a separate target')
+  assert.equal(scene.children[0].material, calls[0].materials[0], 'original print material is restored')
+  const overlay = calls[4]
   assert.equal(overlay.target, null)
   assert.equal(overlay.autoClear, false, 'overlay cannot clear the original view')
   assert.equal(overlay.scissorTest, true)
