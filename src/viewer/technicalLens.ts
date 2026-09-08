@@ -29,36 +29,42 @@ export type LensParams = {
   bloomRadius: number
   bloomThreshold: number
   grainStrength: number
+  movingRowDensity: number
+  rowSpeed: number
+  rowTravel: number
 }
 
 export const DEFAULT_LENS: LensParams = {
   enabled: true,
   lensSize: 300,
-  cellSize: 4.5,
-  pointSize: 1.35,
-  pointDensity: 0.9,
-  flicker: 0.22,
-  edgeBoost: 1.25,
-  glitchAmount: 0.32,
-  glitchFrequency: 0.55,
-  glitchShift: 14,
-  scanlines: 0.28,
-  shadowGreen: '#062f24',
-  midGreen: '#1bd671',
-  highlightGreen: '#85edc6',
-  highlightGold: '#efda94',
-  highlightWhite: '#f4fff9',
-  shadowThreshold: 0.28,
-  highlightThreshold: 0.72,
-  baseDarken: 0.42,
-  effectIntensity: 1.15,
-  borderOpacity: 0.42,
-  surfaceRoughness: 0.34,
-  animSpeed: 0.75,
-  bloomStrength: 0.32,
+  cellSize: 6,
+  pointSize: 1.8,
+  pointDensity: 0.65,
+  flicker: 0.64,
+  edgeBoost: 0.84,
+  glitchAmount: 0.28,
+  glitchFrequency: 2,
+  glitchShift: 27,
+  scanlines: 0.77,
+  shadowGreen: '#000000',
+  midGreen: '#3f4c4b',
+  highlightGreen: '#45b279',
+  highlightGold: '#c3efe1',
+  highlightWhite: '#d0ffed',
+  shadowThreshold: 0.6,
+  highlightThreshold: 0.82,
+  baseDarken: 0.37,
+  effectIntensity: 0.91,
+  borderOpacity: 0.69,
+  surfaceRoughness: 0.7,
+  animSpeed: 2,
+  bloomStrength: 0,
   bloomRadius: 5,
   bloomThreshold: 0.62,
-  grainStrength: 0.045,
+  grainStrength: 0.11,
+  movingRowDensity: 0.22,
+  rowSpeed: 0.35,
+  rowTravel: 1.25,
 }
 
 const VERTEX = /* glsl */ `
@@ -97,6 +103,11 @@ uniform float uBaseDarken;
 uniform float uEffectIntensity;
 uniform float uBorderOpacity;
 uniform float uSurfaceRoughness;
+uniform float uMovingRowDensity;
+uniform float uRowSpeed;
+uniform float uRowTravel;
+uniform float uRowTime;
+uniform float uRowMotionEnabled;
 
 varying vec2 vUv;
 
@@ -142,8 +153,29 @@ void main() {
 
   float cellSize = max(uCellSize, 2.0);
   vec2 cellId = floor(pixel / cellSize);
+  float baseRow = cellId.y;
+  float bestDistance = 1e10;
+  vec2 movedCenter = (cellId + 0.5) * cellSize;
+  // Search source rows, including rows that have moved across cell boundaries.
+  // Stable per-row selection keeps most rows anchored; this moves point
+  // positions themselves, rather than just changing their sampled brightness.
+  for (int offset = -4; offset <= 4; offset++) {
+    float sourceRow = baseRow + float(offset);
+    float seed = hash21(vec2(sourceRow, 73.19));
+    float moving = (1.0 - step(clamp(uMovingRowDensity, 0.0, 1.0), seed)) * uRowMotionEnabled;
+    float phase = hash21(vec2(sourceRow, 18.7)) * 6.2831853;
+    float travel = sin(uRowTime * uRowSpeed * 6.2831853 * (0.75 + seed * 0.5) + phase)
+      * clamp(uRowTravel, 0.0, 3.0) * cellSize * moving;
+    float centerY = (sourceRow + 0.5) * cellSize + travel;
+    float distanceY = abs(pixel.y - centerY);
+    if (distanceY < bestDistance) {
+      bestDistance = distanceY;
+      cellId.y = sourceRow;
+      movedCenter.y = centerY;
+    }
+  }
   vec2 cellCenter = (cellId + 0.5) * cellSize;
-  vec2 localPx = pixel - cellCenter;
+  vec2 localPx = pixel - movedCenter;
   vec2 cellUv = clamp(cellCenter / uResolution, vec2(0.001), vec2(0.999));
 
   vec4 subjectHere = texture2D(tSubject, vUv);
@@ -172,8 +204,8 @@ void main() {
   vec3 palette = scanPalette(shapedLum);
 
   float densitySeed = hash21(cellId + vec2(13.7, 91.3));
-  float density = clamp(uPointDensity + detailEdge * 0.08 + shapedLum * 0.04, 0.0, 1.0);
-  float keepPoint = step(densitySeed, density);
+  float density = clamp(uPointDensity, 0.0, 1.0);
+  float keepPoint = 1.0 - step(density, densitySeed);
 
   float radius = clamp(uPointSize, 0.35, cellSize * 0.48);
   float pointDistance = length(localPx);
@@ -329,6 +361,11 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     uBloomRadius: { value: params.bloomRadius },
     uBloomThreshold: { value: params.bloomThreshold },
     uGrainStrength: { value: params.grainStrength },
+    uMovingRowDensity: { value: params.movingRowDensity },
+    uRowSpeed: { value: params.rowSpeed },
+    uRowTravel: { value: params.rowTravel },
+    uRowTime: { value: 0 },
+    uRowMotionEnabled: { value: 1 },
   }
 
   const compositeMaterial = new THREE.ShaderMaterial({
@@ -432,6 +469,11 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     uniforms.uBloomStrength.value = params.bloomStrength
     uniforms.uBloomThreshold.value = params.bloomThreshold
     uniforms.uGrainStrength.value = params.grainStrength
+    uniforms.uMovingRowDensity.value = params.movingRowDensity
+    uniforms.uRowSpeed.value = params.rowSpeed
+    uniforms.uRowTravel.value = params.rowTravel
+    uniforms.uRowTime.value = elapsed
+    uniforms.uRowMotionEnabled.value = reducedMotion.matches ? 0 : 1
     syncSize()
   }
 
