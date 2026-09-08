@@ -58,7 +58,6 @@ void main() {
 `
 
 const FRAGMENT = /* glsl */ `
-uniform sampler2D tScene;
 uniform sampler2D tScan;
 uniform vec2 uResolution;
 uniform vec2 uPointer;
@@ -82,6 +81,7 @@ uniform float uHighlightThreshold;
 uniform float uBaseDarken;
 uniform float uEffectIntensity;
 uniform float uBorderOpacity;
+
 varying vec2 vUv;
 
 float hash21(vec2 p) {
@@ -104,17 +104,13 @@ vec3 scanPalette(float value) {
 
 void main() {
   vec2 pixel = gl_FragCoord.xy;
-  vec3 sceneColor = texture2D(tScene, vUv).rgb;
-
   float halfLens = uLensSize * 0.5;
   vec2 squareDelta = abs(pixel - uPointer);
   float squareDistance = max(squareDelta.x, squareDelta.y);
   float inside = (1.0 - smoothstep(halfLens - 0.8, halfLens + 0.8, squareDistance)) * uActive;
 
   if (inside <= 0.0) {
-    gl_FragColor = vec4(sceneColor, 1.0);
-    #include <tonemapping_fragment>
-    #include <colorspace_fragment>
+    gl_FragColor = vec4(0.0);
     return;
   }
 
@@ -173,29 +169,45 @@ void main() {
   float scanlineShade = mix(1.0, mix(0.72, 1.05, fineLine), uScanlines);
 
   float brokenSegment = step(0.55, hash21(vec2(floor(pixel.x / 28.0), rowId + timeStep * 3.0)));
-  float streak = glitchBand * brokenSegment * (1.0 - smoothstep(0.0, 1.4, abs(mod(pixel.y, max(cellSize * 0.62, 1.0)) - 0.5)));
+  float rowCell = mod(pixel.y, max(cellSize * 0.62, 1.0));
+  float streakShape = 1.0 - smoothstep(0.25, 1.25, abs(rowCell - 0.5));
+  float streak = glitchBand * brokenSegment * streakShape;
 
-  vec3 pointColor = palette * (0.48 + shapedLum * 1.18 + edge * 0.55) * flicker;
+  vec3 pointColor = palette * (0.5 + shapedLum * 1.15 + edge * 0.55) * flicker * scanlineShade;
   pointColor += uHighlightGreen * sparkle * (0.75 + shapedLum) * 1.8;
-  pointColor *= scanlineShade;
 
-  vec3 darkWindow = sceneColor * mix(1.0, 0.32, uBaseDarken);
-  darkWindow = mix(darkWindow, uShadowGreen * (0.14 + luminance(sceneColor) * 0.08), uBaseDarken * 0.34);
-
-  vec3 scanColor = darkWindow;
   float luminousPoints = pointShape * keepPoint * subjectMask;
-  scanColor += pointColor * luminousPoints * uEffectIntensity;
+  float pointAlpha = clamp(luminousPoints * (0.55 + uEffectIntensity * 0.35), 0.0, 0.96);
+  float textureAlpha = subjectMask * shapedLum * 0.08 * uEffectIntensity;
+  float streakAlpha = streak * subjectMask * uGlitchAmount * 0.5;
 
-  float microTexture = hash21(pixel + floor(uTime * 18.0));
-  scanColor += palette * subjectMask * shapedLum * microTexture * 0.045 * uEffectIntensity;
-  scanColor += uHighlightGreen * streak * subjectMask * (0.15 + shapedLum * 0.55) * uGlitchAmount;
+  float windowAlpha = inside * uBaseDarken * 0.34;
+  vec3 windowColor = uShadowGreen * (0.55 + subjectMask * 0.18);
 
   float borderDistance = abs(squareDistance - halfLens);
   float border = (1.0 - smoothstep(0.5, 1.8, borderDistance)) * uActive;
-  scanColor += uHighlightGreen * border * uBorderOpacity;
+  float borderAlpha = border * uBorderOpacity;
 
-  vec3 color = mix(sceneColor, scanColor, inside);
-  gl_FragColor = vec4(color, 1.0);
+  vec3 overlayColor = windowColor;
+  float overlayAlpha = windowAlpha;
+
+  float pointMix = pointAlpha * inside;
+  overlayColor = mix(overlayColor, pointColor, pointMix);
+  overlayAlpha = max(overlayAlpha, pointMix);
+
+  float micro = hash21(pixel + floor(uTime * 18.0));
+  float microAlpha = textureAlpha * micro * inside;
+  overlayColor = mix(overlayColor, palette, microAlpha);
+  overlayAlpha = max(overlayAlpha, microAlpha);
+
+  float glitchMix = streakAlpha * inside;
+  overlayColor = mix(overlayColor, uHighlightGreen, glitchMix);
+  overlayAlpha = max(overlayAlpha, glitchMix);
+
+  overlayColor = mix(overlayColor, uHighlightGreen, borderAlpha);
+  overlayAlpha = max(overlayAlpha, borderAlpha);
+
+  gl_FragColor = vec4(overlayColor, clamp(overlayAlpha, 0.0, 0.98));
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }
@@ -205,20 +217,16 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
   const params: LensParams = { ...DEFAULT_LENS }
   const size = renderer.getDrawingBufferSize(new THREE.Vector2())
 
-  const makeTarget = (samples: number) => new THREE.WebGLRenderTarget(size.x, size.y, {
-    type: THREE.HalfFloatType,
+  const scanTarget = new THREE.WebGLRenderTarget(size.x, size.y, {
+    type: THREE.UnsignedByteType,
     format: THREE.RGBAFormat,
     colorSpace: THREE.LinearSRGBColorSpace,
     minFilter: THREE.LinearFilter,
     magFilter: THREE.LinearFilter,
     depthBuffer: true,
     stencilBuffer: false,
-    samples,
+    samples: 0,
   })
-
-  const sceneTarget = makeTarget(4)
-  const scanTarget = makeTarget(0)
-  sceneTarget.texture.name = 'ScanLens.original'
   scanTarget.texture.name = 'ScanLens.subject'
 
   const pointerCss = new THREE.Vector2(-1, -1)
@@ -235,13 +243,13 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     const material = new THREE.MeshPhysicalMaterial({
       color: '#36e69a',
       map: original.map ?? null,
-      metalness: 0.72,
+      metalness: 0.68,
       roughness: params.surfaceRoughness,
-      envMapIntensity: 2.3,
+      envMapIntensity: 2.1,
       emissive: new THREE.Color('#062f24'),
-      emissiveIntensity: 0.2,
-      clearcoat: 0.18,
-      clearcoatRoughness: 0.3,
+      emissiveIntensity: 0.18,
+      clearcoat: 0.14,
+      clearcoatRoughness: 0.32,
       normalMap: original.normalMap ?? null,
       bumpMap: original.bumpMap ?? null,
       bumpScale: original.bumpScale ?? 1,
@@ -249,6 +257,8 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
       aoMapIntensity: original.aoMapIntensity ?? 1,
       alphaMap: original.alphaMap ?? null,
       alphaTest: source.alphaTest,
+      transparent: source.transparent,
+      opacity: source.opacity,
       side: source.side,
       displacementMap: original.displacementMap ?? null,
       displacementScale: original.displacementScale ?? 1,
@@ -262,7 +272,6 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
   }
 
   const uniforms = {
-    tScene: { value: sceneTarget.texture },
     tScan: { value: scanTarget.texture },
     uResolution: { value: size.clone() },
     uPointer: { value: new THREE.Vector2(-1e6, -1e6) },
@@ -289,10 +298,12 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
   }
 
   const compositeMaterial = new THREE.ShaderMaterial({
-    name: 'Green scan lens composite',
+    name: 'Green scan lens overlay',
     uniforms,
     vertexShader: VERTEX,
     fragmentShader: FRAGMENT,
+    transparent: true,
+    blending: THREE.NormalBlending,
     depthTest: false,
     depthWrite: false,
     toneMapped: true,
@@ -316,7 +327,6 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     renderer.getDrawingBufferSize(size)
     const width = Math.max(1, Math.floor(size.x))
     const height = Math.max(1, Math.floor(size.y))
-    sceneTarget.setSize(width, height)
     scanTarget.setSize(width, height)
     syncSize()
   }
@@ -360,11 +370,11 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
 
   const render = (scene: THREE.Scene, camera: THREE.Camera, elapsed: number) => {
     const active = pointerActive && params.enabled
-    if (!active || subjectMeshes.size === 0) {
-      renderer.setRenderTarget(null)
-      renderer.render(scene, camera)
-      return
-    }
+
+    renderer.setRenderTarget(null)
+    renderer.render(scene, camera)
+
+    if (!active || subjectMeshes.size === 0) return
 
     syncUniforms(elapsed)
     uniforms.uActive.value = 1
@@ -374,13 +384,11 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     const previousShadowAutoUpdate = renderer.shadowMap.autoUpdate
     const previousClearAlpha = renderer.getClearAlpha()
     const previousClearColor = renderer.getClearColor(new THREE.Color()).clone()
+    const previousAutoClear = renderer.autoClear
     const hiddenMeshes: Array<[THREE.Mesh, boolean]> = []
     const swappedMaterials: Array<[THREE.Mesh, THREE.Material | THREE.Material[]]> = []
 
     try {
-      renderer.setRenderTarget(sceneTarget)
-      renderer.render(scene, camera)
-
       renderer.shadowMap.autoUpdate = false
       scene.traverse((object) => {
         if (!(object instanceof THREE.Mesh)) return
@@ -408,11 +416,16 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
       renderer.setRenderTarget(previousTarget)
     }
 
-    quad.render(renderer)
+    renderer.setRenderTarget(null)
+    renderer.autoClear = false
+    try {
+      quad.render(renderer)
+    } finally {
+      renderer.autoClear = previousAutoClear
+    }
   }
 
   const dispose = () => {
-    sceneTarget.dispose()
     scanTarget.dispose()
     for (const material of materialCache.values()) material.dispose()
     materialCache.clear()
