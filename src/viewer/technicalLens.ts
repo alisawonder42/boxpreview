@@ -198,14 +198,16 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
   const size = renderer.getDrawingBufferSize(new THREE.Vector2())
 
   const makeTarget = () => new THREE.WebGLRenderTarget(size.x, size.y, {
-    type: THREE.HalfFloatType,
+    // The scan only needs normalized color. Avoid float/MSAA framebuffer
+    // combinations that are not renderable on some mobile and older GPUs.
+    type: THREE.UnsignedByteType,
     format: THREE.RGBAFormat,
     colorSpace: THREE.LinearSRGBColorSpace,
     minFilter: THREE.LinearFilter,
     magFilter: THREE.LinearFilter,
     depthBuffer: true,
     stencilBuffer: false,
-    samples: 4,
+    samples: 0,
   })
 
   const sceneTarget = makeTarget()
@@ -316,16 +318,19 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
   }
 
   const render = (scene: THREE.Scene, camera: THREE.Camera, elapsed: number) => {
+    // Keep the base view independent of the lens's offscreen passes.
+    const previousTarget = renderer.getRenderTarget()
+    renderer.render(scene, camera)
     const active = pointerActive && params.enabled
     if (!active || subjectMeshes.size === 0) {
-      renderer.setRenderTarget(null)
-      renderer.render(scene, camera)
       return
     }
 
     syncUniforms(elapsed)
 
-    const previousTarget = renderer.getRenderTarget()
+    const previousAutoClear = renderer.autoClear
+    const previousScissorTest = renderer.getScissorTest()
+    const previousScissor = renderer.getScissor(new THREE.Vector4())
     const previousBackground = scene.background
     const previousShadowAutoUpdate = renderer.shadowMap.autoUpdate
     const previousClearColor = renderer.getClearColor(new THREE.Color()).clone()
@@ -333,6 +338,8 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     const hiddenMeshes: Array<[THREE.Mesh, boolean]> = []
 
     try {
+      renderer.autoClear = true
+      renderer.setScissorTest(false)
       renderer.setRenderTarget(sceneTarget)
       renderer.render(scene, camera)
 
@@ -355,9 +362,34 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
       renderer.shadowMap.autoUpdate = previousShadowAutoUpdate
       renderer.setClearColor(previousClearColor, previousClearAlpha)
       renderer.setRenderTarget(previousTarget)
+      renderer.autoClear = previousAutoClear
+      renderer.setScissor(previousScissor)
+      renderer.setScissorTest(previousScissorTest)
     }
 
-    quad.render(renderer)
+    // Scissor uses renderer pixels (before pixel ratio); uniforms use drawing
+    // buffer pixels. Never clear or overwrite the scene outside this rectangle,
+    // even if the composite shader cannot compile on a particular driver.
+    const pixelRatio = renderer.getPixelRatio()
+    const halfLens = uniforms.uLensSize.value * 0.5 + 2
+    const pointer = uniforms.uPointer.value
+    const left = Math.max(0, Math.floor(pointer.x - halfLens))
+    const bottom = Math.max(0, Math.floor(pointer.y - halfLens))
+    const right = Math.min(size.x, Math.ceil(pointer.x + halfLens))
+    const top = Math.min(size.y, Math.ceil(pointer.y + halfLens))
+    if (right <= left || top <= bottom) return
+
+    try {
+      renderer.autoClear = false
+      renderer.setScissor(left / pixelRatio, bottom / pixelRatio,
+        (right - left) / pixelRatio, (top - bottom) / pixelRatio)
+      renderer.setScissorTest(true)
+      quad.render(renderer)
+    } finally {
+      renderer.autoClear = previousAutoClear
+      renderer.setScissor(previousScissor)
+      renderer.setScissorTest(previousScissorTest)
+    }
   }
 
   const dispose = () => {
