@@ -92,8 +92,10 @@ export function attachDebugMenu(options: DebugOptions) {
 
     const color = folder.addFolder('Color')
     color.addColor(lens, 'shadowGreen').name('shadow')
-    color.addColor(lens, 'midGreen').name('midtone')
-    color.addColor(lens, 'highlightGreen').name('highlight')
+    color.addColor(lens, 'midGreen').name('base')
+    color.addColor(lens, 'highlightGreen').name('highlight 1 · mint')
+    color.addColor(lens, 'highlightGold').name('highlight 2 · gold')
+    color.addColor(lens, 'highlightWhite').name('highlight 3 · white')
     color.add(lens, 'shadowThreshold', 0.05, 0.6, 0.01).name('shadow threshold')
     color.add(lens, 'highlightThreshold', 0.4, 0.95, 0.01).name('highlight threshold')
     color.open()
@@ -107,6 +109,7 @@ export function attachDebugMenu(options: DebugOptions) {
     bloom.add(lens, 'bloomStrength', 0, 1, 0.01).name('strength')
     bloom.add(lens, 'bloomRadius', 1, 14, 0.5).name('radius')
     bloom.add(lens, 'bloomThreshold', 0.2, 0.95, 0.01).name('threshold')
+    bloom.add(lens, 'grainStrength', 0, 0.15, 0.005).name('film grain')
 
     folder.add(
       {
