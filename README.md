@@ -89,3 +89,12 @@ node scripts/test-corruption.mjs /path/to/glslangValidator
 The tests cover capture sources, mask/occluder materials, cutouts, render-state
 restoration, reduced motion, disabled bypass, and GLSL compilation/linking. The
 remote browser has WebGL disabled; visual matching needs a WebGL-capable browser.
+
+Colored strips use independent surface-row phases, speeds, directions and pulse
+timing. Their coordinates move continuously left/right, keeping each fragment's
+color identity stable. Color artifacts exposes sideways speed, travel and moving
+row fraction. All movement remains inside the cursor/object mask.
+
+The preserved technicalLens scanner is a different, archived normal-based relief
+effect with a five-tone palette, points, broken green streaks and optional row
+cycling. The current fine lines and moving sweep do not restore that full effect.
