@@ -43,58 +43,48 @@ Embed: `https://alisawonder42.github.io/boxpreview/?embed=1`
 
 Or copy `src/viewer` into the portfolio and mount the canvas there. It is vanilla Three.js — no React.
 
-## Rigid box surface corruption
+## Printed surface and scanner lens
 
-The active effect resamples the original rendered box into restrained horizontal
-strips. It never displaces vertices or moves the silhouette. A depth-tested object
-mask includes scene occluders and alpha cutouts; geometric normals protect sharp
-face creases. A narrow rim stays untouched, and shifted color samples outside the
-subject or across a sharp face boundary fall back to the original pixel.
+The fixed cursor square reveals an opaque composite only where it overlaps the
+visible jewelry box (`cursorSquareMask * objectMask`). Original scene pixels stay
+untouched outside that intersection. Geometry never moves; the composite protects
+the silhouette rim and sharp creases and rejects samples outside the subject.
 
-The original scene renders directly first. Only affected interior pixels are then
-overwritten with an opaque blend, preserving the background and antialiased outline.
-The pattern is anchored in subject-local coordinates reconstructed from visible
-depth. Bands, color fragments, scanlines and texture offsets follow the box faces
-through orbit and rotation; the cursor only reveals them. Offset controls use
-nominal surface pixels (300 across a face), independent of zoom.
+The shader reconstructs subject-local positions from visible depth. Fine diagonal
+cross-hatching uses smoothly blended triplanar projections with isotropic spacing.
+Rendered luminance controls the strength of each diagonal direction; deep shadows
+reveal extra interleaved lines. Fixed line coordinates do not slide when lighting
+changes. Derivative filtering fades unresolved detail to reduce moire.
 
-The fixed 300px cursor square intersects the object mask; only their overlap is
-affected. Pointer leave disables the overlay. Drag/orbit, reset, resize, and model replacement remain
-available. Reduced-motion preferences freeze the corruption pattern.
+The completed treatment combines print shading, restrained scanner lines/sweep,
+fragmented horizontal offsets, occasional black bands, stretches and duplicated
+source fragments, subtle RGB separation and localized cyan/magenta/rare green
+accents. Colored rows retain independent sideways speed, phase and pulse timing.
 
-**Look → Box · horizontal corruption** keeps **Scanner** and **Color artifacts** as
-separate layers and control groups. Fine lines plus a moving surface-anchored scan
-remain visible between glitch bursts; short colored fragments appear beside damaged
-rows instead of covering the scanner. The remaining controls expose band coverage,
-strip offset, tears, RGB split, square size, color strength/density, optional band noise,
-blend, and animation speed. Magenta, cyan, green, blue and rare red fragments appear
-only in damaged rows. The initial coverage is 22% of square height, before edge protection, with a
-70% blend within those bands. Actual affected surface area varies with the view;
-most of the texture stays readable. Noise defaults to zero.
+One final blend controls the entire treatment, including color. The default is
+75% original plus 25% treated color in linear space, with fully opaque output.
+Perceived appearance still depends on lighting and tone mapping.
 
-The older implementations remain in `technicalLens.ts` and `analogCRT.ts`, disabled
-by default, omitted from the active render chain, and hidden from the GUI. To
-restore them later, explicitly enable and reconnect those modules in `app.ts`.
+**Look → Box · horizontal corruption** provides overall effect opacity and square
+size; **Print shading** controls hatch strength, density and ink width;
+**Scanner** controls line strength, sweep strength and speed; **Color artifacts**
+controls color strength/density and sideways motion. The remaining controls tune
+corruption coverage, offsets, tears, RGB separation and optional noise (off).
+
+The original `technicalLens.ts` and `analogCRT.ts` implementations remain archived,
+disabled and hidden. The old scanner used geometry normals, a five-tone relief
+palette, points, broken green streaks and optional row cycling. It is separate
+from the currently active scanner lines and sweep.
 
 Validation:
 
 ```bash
 npm run build
-node scripts/test-lens.mjs
-node scripts/test-signal.mjs
+node scripts/test-corruption.mjs --logic-only
 node scripts/test-shader.mjs /path/to/glslangValidator
 node scripts/test-corruption.mjs /path/to/glslangValidator
 ```
 
-The tests cover capture sources, mask/occluder materials, cutouts, render-state
-restoration, reduced motion, disabled bypass, and GLSL compilation/linking. The
-remote browser has WebGL disabled; visual matching needs a WebGL-capable browser.
-
-Colored strips use independent surface-row phases, speeds, directions and pulse
-timing. Their coordinates move continuously left/right, keeping each fragment's
-color identity stable. Color artifacts exposes sideways speed, travel and moving
-row fraction. All movement remains inside the cursor/object mask.
-
-The preserved technicalLens scanner is a different, archived normal-based relief
-effect with a five-tone palette, points, broken green streaks and optional row
-cycling. The current fine lines and moving sweep do not restore that full effect.
+Logic tests cover render state, pixel-density scaling, stable surface coordinates,
+cursor independence, reduced motion and disabled bypass. GLSL compilation requires
+the external validator; real GPU visual review remains necessary.
