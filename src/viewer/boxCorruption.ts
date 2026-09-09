@@ -2,11 +2,12 @@ import * as THREE from 'three'
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js'
 
 export const DEFAULT_CORRUPTION = {
-  enabled: true, squareSize: 300, colorStrength: 0.72, colorDensity: 0.38,
-  colorMotionSpeed: 0.75, colorMotionTravel: 24, colorMovingDensity: 0.7,
-  scanlineStrength: 0.22, scannerSweepStrength: 0.18, scannerSpeed: 0.35, bandCoverage: 0.22,
-  bandOffsetStrength: 12, tearAmount: 0.3, rgbSplitAmount: 0.65,
-  noiseAmount: 0, blendAmount: 0.7, animationSpeed: 1,
+  enabled: true, squareSize: 300, colorStrength: 0.35, colorDensity: 0.25,
+  colorMotionSpeed: 0.55, colorMotionTravel: 14, colorMovingDensity: 0.7,
+  hatchStrength: 0.65, hatchDensity: 90, hatchWidth: 0.12,
+  scanlineStrength: 0.12, scannerSweepStrength: 0.08, scannerSpeed: 0.25, bandCoverage: 0.16,
+  bandOffsetStrength: 6, tearAmount: 0.15, rgbSplitAmount: 0.35,
+  noiseAmount: 0, blendAmount: 0.25, animationSpeed: 1,
 }
 export type CorruptionParams = typeof DEFAULT_CORRUPTION
 
@@ -44,6 +45,9 @@ uniform float uTearAmount;
 uniform float uRgbSplitAmount;
 uniform float uNoiseAmount;
 uniform float uBlendAmount;
+uniform float uHatchStrength;
+uniform float uHatchDensity;
+uniform float uHatchWidth;
 varying vec2 vUv;
 float boxHash(float p) { return fract(sin(p * 127.1 + 91.7) * 43758.5453); }
 float boxMask(vec2 uv) {
@@ -81,6 +85,22 @@ vec2 boxProject(vec3 position) {
   if (clip.w <= 0.0) return vec2(-1.0);
   return clip.xy / clip.w * 0.5 + 0.5;
 }
+// Fixed-frequency ink lines: lighting changes opacity, never their position.
+float printLine(float coordinate) {
+  float footprint = max(fwidth(coordinate), 0.0001);
+  float distanceToLine = abs(fract(coordinate + 0.5) - 0.5);
+  float ink = 1.0 - smoothstep(uHatchWidth * 0.5 - footprint,
+    uHatchWidth * 0.5 + footprint, distanceToLine);
+  return ink * (1.0 - smoothstep(0.35, 0.8, footprint));
+}
+float printCross(vec2 plane, float shadow) {
+  vec2 diagonal = vec2(plane.x + plane.y, plane.x - plane.y) * 0.70710678;
+  float first = printLine(diagonal.x * uHatchDensity) * smoothstep(0.05, 0.6, shadow);
+  float second = printLine(diagonal.y * uHatchDensity) * smoothstep(0.3, 0.85, shadow);
+  // Interleaved fine lines emerge only in deep shadows, without shifting the base grid.
+  float dense = printLine(diagonal.x * uHatchDensity * 2.0) * smoothstep(0.65, 1.0, shadow) * 0.35;
+  return max(max(first, second), dense);
+}
 void main() {
   // Both masks use the undistorted destination; sampling never moves the boundary.
   vec2 local = (vUv * uResolution - uPointer) / uSquareSize + 0.5;
@@ -112,8 +132,21 @@ void main() {
   float localY = fract(y * 4.0);
   float distance = abs(localY - center);
   float band = 1.0 - smoothstep(uBandCoverage * 0.43, uBandCoverage * 0.5, distance);
-  float activity = band * pulse;
+  float fragmentPhase = fract(surfaceX * 7.0 + boxHash(seed + 40.0));
+  float stripFragment = smoothstep(0.02, 0.06, fragmentPhase)
+    * (1.0 - smoothstep(0.68, 0.74, fragmentPhase));
+  float activity = band * pulse * stripFragment;
   vec3 original = texture2D(tScene, vUv).rgb;
+  float litLuminance = dot(original, vec3(0.2126, 0.7152, 0.0722));
+  float shadow = 1.0 - smoothstep(0.12, 0.85, sqrt(max(litLuminance, 0.0)));
+  // Isotropic subject-local triplanar projection; blends across curved transitions.
+  float extent = max(max(uObjectSize.x, uObjectSize.y), uObjectSize.z);
+  vec3 hatchPosition = (surface - uObjectMin) / max(extent, 0.0001);
+  vec3 weights = pow(n, vec3(4.0));
+  weights /= max(dot(weights, vec3(1.0)), 0.0001);
+  float hatch = printCross(hatchPosition.yz, shadow) * weights.x
+    + printCross(hatchPosition.xz, shadow) * weights.y
+    + printCross(hatchPosition.xy, shadow) * weights.z;
   float direction = boxHash(seed + 2.0) * 2.0 - 1.0;
   float strong = step(0.86, boxHash(state + 97.0));
   float row = floor(surfaceY * 150.0);
@@ -124,6 +157,9 @@ void main() {
   float x = mix(surfaceX + shift, 0.5 + (surfaceX + shift - 0.5) * 0.22, stretch);
   float brokenRow = step(0.55, boxHash(row + state * 71.0));
   float split = uRgbSplitAmount * (0.25 + 2.0 * brokenRow + tear) * pulse / 300.0;
+  // Occasionally repeat a neighboring source fragment along the face direction.
+  float duplicate = step(0.87, boxHash(seed + floor(surfaceX * 7.0) * 23.0 + 80.0));
+  x -= duplicate * direction * 0.045 * pulse;
   vec3 samplePosition = surface + horizontal * uObjectSize * (x - surfaceX);
   vec3 splitVector = horizontal * uObjectSize * split;
   vec3 effect = vec3(boxRead(boxProject(samplePosition + splitVector), original).r,
@@ -138,7 +174,7 @@ void main() {
   sweepDistance = min(sweepDistance, 1.0 - sweepDistance);
   float sweep = exp(-sweepDistance * sweepDistance * 1800.0) * uScannerSweepStrength;
   vec3 scanLayer = original * (1.0 - uScanlineStrength * scan)
-    + vec3(0.14, 0.72, 0.52) * sweep;
+    + original * sweep;
 
   // Short colored fragments sit beside damaged fragments instead of replacing the scanner.
   // Each surface row has its own clock, phase, travel and direction.
@@ -162,10 +198,8 @@ void main() {
   float colored = step(1.0 - uColorDensity, boxHash(colorSeed))
     * fragmentWindow * rowSelected * rowPulse;
   float hue = boxHash(colorSeed + 19.0);
-  vec3 accent = hue < 0.24 ? vec3(1.0, 0.01, 0.65)
-    : hue < 0.48 ? vec3(0.01, 0.85, 1.0)
-    : hue < 0.72 ? vec3(0.04, 1.0, 0.08)
-    : hue < 0.94 ? vec3(0.03, 0.12, 1.0) : vec3(1.0, 0.015, 0.02);
+  vec3 accent = hue < 0.46 ? vec3(0.03, 0.65, 0.75)
+    : hue < 0.92 ? vec3(0.75, 0.04, 0.45) : vec3(0.10, 0.62, 0.18);
   float sourceLight = dot(effect, vec3(0.2126, 0.7152, 0.0722));
   vec3 colorLayer = accent * (0.22 + sourceLight * 0.48) * colored * uColorStrength;
   // Rare missing strips stay opaque, so they never reveal background geometry.
@@ -173,11 +207,12 @@ void main() {
   effect *= 1.0 - missing * 0.96;
   float grain = boxHash(floor(surfaceX * 300.0) + row * 157.0 + state * 919.0) - 0.5;
   effect = max(vec3(0.0), effect + grain * uNoiseAmount);
-  vec3 scanned = mix(original, scanLayer, uBlendAmount);
-  vec3 corrupted = mix(scanned, effect, activity * uBlendAmount);
-  // Add the chromatic accent after both layers so neither erases the scanner pattern.
-  vec3 combined = min(vec3(1.0), corrupted + colorLayer);
-  gl_FragColor = vec4(mix(original, combined, finalMask), 1.0);
+  // Assemble all treatments first, then apply ONE global opacity to the full result.
+  // Even colored accents obey the original/effect ratio; output remains opaque.
+  vec3 treated = mix(scanLayer, effect, activity);
+  treated *= 1.0 - hatch * uHatchStrength;
+  treated += colorLayer;
+  gl_FragColor = vec4(mix(original, treated, finalMask * uBlendAmount), 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }
@@ -208,7 +243,7 @@ export function createBoxCorruption(renderer: THREE.WebGLRenderer) {
     uSquareSize: { value: new THREE.Vector2(300, 300) },
     uPixelRatio: { value: renderer.getPixelRatio() }, uTime: { value: 0 },
   }
-  const keys = ['scanlineStrength', 'scannerSweepStrength', 'scannerSpeed',
+  const keys = ['hatchStrength', 'hatchDensity', 'hatchWidth', 'scanlineStrength', 'scannerSweepStrength', 'scannerSpeed',
     'bandCoverage', 'bandOffsetStrength', 'tearAmount',
     'rgbSplitAmount', 'noiseAmount', 'blendAmount', 'colorStrength', 'colorDensity',
     'colorMotionSpeed', 'colorMotionTravel', 'colorMovingDensity'] as const
