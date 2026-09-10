@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js'
 
 export const DEFAULT_CORRUPTION = {
-  enabled: true, squareSize: 300, colorStrength: 0.35, colorDensity: 0.25,
+  enabled: true, squareSize: 300, surfaceDistance: 2, colorStrength: 0.35, colorDensity: 0.25,
   colorMotionSpeed: 0.55, colorMotionTravel: 14, colorMovingDensity: 0.7,
   ledEnabled: true, ledStrength: 0.45, ledPixelSize: 7.62, ledGap: 0, ledBlur: 0.08, ledRgbMode: true,
   hatchStrength: 0.65, hatchDensity: 90, hatchWidth: 0.12,
@@ -48,6 +48,7 @@ uniform float uTearAmount;
 uniform float uRgbSplitAmount;
 uniform float uNoiseAmount;
 uniform float uBlendAmount;
+uniform float uSurfaceDistance;
 uniform bool uLedEnabled;
 uniform bool uLedRgbMode;
 uniform float uLedStrength;
@@ -132,10 +133,20 @@ void main() {
   float objectMask = boxMask(vUv);
   float finalMask = cursorSquareMask * objectMask;
   if (finalMask < 0.999 || boxInterior(vUv) < 0.5 || (uBlendAmount <= 0.0 && uDotOpacity <= 0.0)) discard;
+  // Inverse normal-directed reprojection: only the treatment moves above the base.
+  // A screen-space approximation to a thin lifted shell, measured in CSS pixels.
+  vec2 effectUv = vUv;
+  vec3 destinationNormal = normalize(texture2D(tMask, vUv).rgb * 2.0 - 1.0);
+  for (int iteration = 0; iteration < 2; iteration++) {
+    vec3 viewNormal = normalize(texture2D(tMask, effectUv).rgb * 2.0 - 1.0);
+    vec2 candidate = vUv - viewNormal.xy * uSurfaceDistance * uPixelRatio / uResolution;
+    if (boxInterior(candidate) < 0.5 || boxSurface(candidate, destinationNormal) < 0.5) break;
+    effectUv = candidate;
+  }
   // Reconstruct the visible surface in the subject root's own coordinates.
   // Cursor position affects only visibility, never the pattern or its sampling.
-  float depth = texture2D(tDepth, vUv).x;
-  vec4 surfaceH = uClipToObject * vec4(vUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+  float depth = texture2D(tDepth, effectUv).x;
+  vec4 surfaceH = uClipToObject * vec4(effectUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
   vec3 surface = surfaceH.xyz / surfaceH.w;
   vec3 p = (surface - uObjectMin) / uObjectSize;
   vec3 n = abs(normalize(cross(dFdx(surface), dFdy(surface))));
@@ -160,7 +171,8 @@ void main() {
     * (1.0 - smoothstep(0.68, 0.74, fragmentPhase));
   float activity = band * pulse * stripFragment;
   vec3 original = texture2D(tScene, vUv).rgb;
-  float litLuminance = dot(original, vec3(0.2126, 0.7152, 0.0722));
+  vec3 effectBase = texture2D(tScene, effectUv).rgb;
+  float litLuminance = dot(effectBase, vec3(0.2126, 0.7152, 0.0722));
   float shadow = 1.0 - smoothstep(0.12, 0.85, sqrt(max(litLuminance, 0.0)));
   // Isotropic subject-local triplanar projection; blends across curved transitions.
   float extent = max(max(uObjectSize.x, uObjectSize.y), uObjectSize.z);
@@ -185,9 +197,9 @@ void main() {
   x -= duplicate * direction * 0.045 * pulse;
   vec3 samplePosition = surface + horizontal * uObjectSize * (x - surfaceX);
   vec3 splitVector = horizontal * uObjectSize * split;
-  vec3 effect = vec3(boxRead(boxProject(samplePosition + splitVector), original).r,
-    boxRead(boxProject(samplePosition), original).g,
-    boxRead(boxProject(samplePosition - splitVector), original).b);
+  vec3 effect = vec3(boxRead(boxProject(samplePosition + splitVector), effectBase).r,
+    boxRead(boxProject(samplePosition), effectBase).g,
+    boxRead(boxProject(samplePosition - splitVector), effectBase).b);
   float scanPhase = surfaceY * 300.0;
   float scan = (0.5 + 0.5 * cos(scanPhase * 3.14159265))
     * (1.0 - smoothstep(0.5, 2.0, fwidth(scanPhase)));
@@ -196,8 +208,8 @@ void main() {
   float sweepDistance = abs(surfaceY - scannerSweepY);
   sweepDistance = min(sweepDistance, 1.0 - sweepDistance);
   float sweep = exp(-sweepDistance * sweepDistance * 1800.0) * uScannerSweepStrength;
-  vec3 scanLayer = original * (1.0 - uScanlineStrength * scan)
-    + original * sweep;
+  vec3 scanLayer = effectBase * (1.0 - uScanlineStrength * scan)
+    + effectBase * sweep;
 
   // Short colored fragments sit beside damaged fragments instead of replacing the scanner.
   // Each surface row has its own clock, phase, travel and direction.
@@ -241,7 +253,7 @@ void main() {
     treated = mix(treated, treated * led, uLedStrength);
   }
   vec3 layered = mix(original, treated, uBlendAmount);
-  if (uDotOpacity > 0.0) layered = mix(layered, texture2D(tDots, vUv).rgb, uDotOpacity);
+  if (uDotOpacity > 0.0) layered = mix(layered, texture2D(tDots, effectUv).rgb, uDotOpacity);
   gl_FragColor = vec4(mix(original, layered, finalMask), 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -274,7 +286,7 @@ export function createBoxCorruption(renderer: THREE.WebGLRenderer) {
     uSquareSize: { value: new THREE.Vector2(300, 300) },
     uPixelRatio: { value: renderer.getPixelRatio() }, uTime: { value: 0 },
   }
-  const keys = ['ledEnabled', 'ledStrength', 'ledPixelSize', 'ledGap', 'ledBlur', 'ledRgbMode', 'hatchStrength', 'hatchDensity', 'hatchWidth', 'scanlineStrength', 'scannerSweepStrength', 'scannerSpeed',
+  const keys = ['surfaceDistance', 'ledEnabled', 'ledStrength', 'ledPixelSize', 'ledGap', 'ledBlur', 'ledRgbMode', 'hatchStrength', 'hatchDensity', 'hatchWidth', 'scanlineStrength', 'scannerSweepStrength', 'scannerSpeed',
     'bandCoverage', 'bandOffsetStrength', 'tearAmount',
     'rgbSplitAmount', 'noiseAmount', 'blendAmount', 'colorStrength', 'colorDensity',
     'colorMotionSpeed', 'colorMotionTravel', 'colorMovingDensity'] as const

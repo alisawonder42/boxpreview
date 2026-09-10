@@ -110,3 +110,14 @@ shared. Capture-only rendering feeds its real output into the final compositor,
 which applies the same visible-object mask and protected silhouette. The original
 dot grid retains its screen-space construction. Bloom and grain are not included
 in this captured layer. The main effect enable is the master toggle.
+
+### Surface distance
+
+Surface distance (default 2 CSS pixels, range 0–12) offsets the sampled treatment
+along the projected visible geometry normals. Depth reconstruction, print, scanner,
+LED and captured dots use the shifted source, while the original image and final
+cursor/object mask remain fixed. Two inverse reprojection iterations approximate
+a thin hovering layer; this is not a separate displaced mesh or a physically
+accurate shell. Sources across the silhouette or sharp creases are rejected.
+Zero restores contact with the surface; front-facing regions have little lateral
+shift. The mask uses geometry normals, not an invented normal map.

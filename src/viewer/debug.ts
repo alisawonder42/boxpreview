@@ -75,6 +75,7 @@ export function attachDebugMenu(options: DebugOptions) {
     const folder = gui.addFolder('Box · horizontal corruption')
     folder.add(corruption, 'enabled')
     folder.add(corruption, 'squareSize', 80, 500, 1).name('cursor square · px')
+    folder.add(corruption, 'surfaceDistance', 0, 12, 0.1).name('Surface distance · px')
     folder.add(corruption, 'blendAmount', 0, 1, 0.01).name('overall effect opacity')
     const hatch = folder.addFolder('Print shading')
     hatch.add(corruption, 'hatchStrength', 0, 1, 0.01).name('hatch strength')
