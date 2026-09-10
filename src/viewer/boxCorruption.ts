@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js'
 
 export const DEFAULT_CORRUPTION = {
-  enabled: true, squareSize: 300, surfaceDistance: 10, colorStrength: 0.97, colorDensity: 0.31,
+  enabled: true, squareSize: 100, surfaceDistance: 10, colorStrength: 0.97, colorDensity: 0.31,
   colorMotionSpeed: 1.55, colorMotionTravel: 53, colorMovingDensity: 0.7,
   ledEnabled: true, ledStrength: 0.91, ledPixelSize: 11.09, ledGap: 0.48, ledBlur: 0.08, ledRgbMode: true,
   hatchStrength: 0.69, hatchDensity: 164, hatchWidth: 0.17,
@@ -298,7 +298,7 @@ export function createBoxCorruption(renderer: THREE.WebGLRenderer) {
     uClipToObject: { value: new THREE.Matrix4() }, uObjectToClip: { value: new THREE.Matrix4() },
     uObjectMin: { value: new THREE.Vector3() }, uObjectSize: { value: new THREE.Vector3(1, 1, 1) },
     uResolution: { value: size }, uPointer: { value: new THREE.Vector2() },
-    uSquareSize: { value: new THREE.Vector2(300, 300) },
+    uSquareSize: { value: new THREE.Vector2(params.squareSize, params.squareSize) },
     uPixelRatio: { value: renderer.getPixelRatio() }, uTime: { value: 0 },
   }
   const keys = ['edgeStrength', 'edgeWidth', 'surfaceDistance', 'ledEnabled', 'ledStrength', 'ledPixelSize', 'ledGap', 'ledBlur', 'ledRgbMode', 'hatchStrength', 'hatchDensity', 'hatchWidth', 'scanlineStrength', 'scannerSweepStrength', 'scannerSpeed',
