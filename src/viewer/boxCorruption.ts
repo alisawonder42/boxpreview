@@ -4,6 +4,7 @@ import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js'
 export const DEFAULT_CORRUPTION = {
   enabled: true, squareSize: 300, colorStrength: 0.35, colorDensity: 0.25,
   colorMotionSpeed: 0.55, colorMotionTravel: 14, colorMovingDensity: 0.7,
+  ledEnabled: true, ledStrength: 0.45, ledPixelSize: 7.62, ledGap: 0, ledBlur: 0.08, ledRgbMode: true,
   hatchStrength: 0.65, hatchDensity: 90, hatchWidth: 0.12,
   scanlineStrength: 0.12, scannerSweepStrength: 0.08, scannerSpeed: 0.25, bandCoverage: 0.16,
   bandOffsetStrength: 6, tearAmount: 0.15, rgbSplitAmount: 0.35,
@@ -22,6 +23,8 @@ const FRAGMENT = /* glsl */ `
 uniform sampler2D tScene;
 uniform sampler2D tMask;
 uniform sampler2D tDepth;
+uniform sampler2D tDots;
+uniform float uDotOpacity;
 uniform mat4 uClipToObject;
 uniform mat4 uObjectToClip;
 uniform vec3 uObjectMin;
@@ -45,6 +48,12 @@ uniform float uTearAmount;
 uniform float uRgbSplitAmount;
 uniform float uNoiseAmount;
 uniform float uBlendAmount;
+uniform bool uLedEnabled;
+uniform bool uLedRgbMode;
+uniform float uLedStrength;
+uniform float uLedPixelSize;
+uniform float uLedGap;
+uniform float uLedBlur;
 uniform float uHatchStrength;
 uniform float uHatchDensity;
 uniform float uHatchWidth;
@@ -101,6 +110,20 @@ float printCross(vec2 plane, float shadow) {
   float dense = printLine(diagonal.x * uHatchDensity * 2.0) * smoothstep(0.65, 1.0, shadow) * 0.35;
   return max(max(first, second), dense);
 }
+// RGB triplets are fixed to each object projection, not to the cursor or screen.
+vec3 ledTriplet(float position) {
+  float coordinate = position * 600.0 / max(uLedPixelSize, 1.0);
+  float footprint = max(fwidth(coordinate), 0.0001);
+  float softness = max(footprint * 0.5, uLedBlur / 6.0 + 0.0001);
+  vec3 distanceToCenter = abs(fract(vec3(coordinate) - vec3(1.0 / 6.0, 0.5, 5.0 / 6.0) + 0.5) - 0.5);
+  float halfWidth = (1.0 - uLedGap) / 6.0;
+  vec3 stripes = vec3(1.0) - smoothstep(vec3(halfWidth - softness), vec3(halfWidth + softness), distanceToCenter);
+  // Suppress unresolved subpixels at distance to avoid colored moire.
+  float resolved = 1.0 - smoothstep(0.12, 0.4, footprint);
+  vec3 modulation = vec3(0.2) + 2.4 * stripes;
+  if (!uLedRgbMode) modulation = vec3(dot(modulation, vec3(1.0 / 3.0)));
+  return mix(vec3(1.0), modulation, resolved);
+}
 void main() {
   // Both masks use the undistorted destination; sampling never moves the boundary.
   vec2 local = (vUv * uResolution - uPointer) / uSquareSize + 0.5;
@@ -108,7 +131,7 @@ void main() {
     * step(0.0, local.y) * step(local.y, 1.0);
   float objectMask = boxMask(vUv);
   float finalMask = cursorSquareMask * objectMask;
-  if (finalMask < 0.999 || boxInterior(vUv) < 0.5 || uBlendAmount <= 0.0) discard;
+  if (finalMask < 0.999 || boxInterior(vUv) < 0.5 || (uBlendAmount <= 0.0 && uDotOpacity <= 0.0)) discard;
   // Reconstruct the visible surface in the subject root's own coordinates.
   // Cursor position affects only visibility, never the pattern or its sampling.
   float depth = texture2D(tDepth, vUv).x;
@@ -212,7 +235,14 @@ void main() {
   vec3 treated = mix(scanLayer, effect, activity);
   treated *= 1.0 - hatch * uHatchStrength;
   treated += colorLayer;
-  gl_FragColor = vec4(mix(original, treated, finalMask * uBlendAmount), 1.0);
+  if (uLedEnabled) {
+    vec3 led = ledTriplet(hatchPosition.z) * weights.x
+      + ledTriplet(hatchPosition.x) * (weights.y + weights.z);
+    treated = mix(treated, treated * led, uLedStrength);
+  }
+  vec3 layered = mix(original, treated, uBlendAmount);
+  if (uDotOpacity > 0.0) layered = mix(layered, texture2D(tDots, vUv).rgb, uDotOpacity);
+  gl_FragColor = vec4(mix(original, layered, finalMask), 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }
@@ -237,13 +267,14 @@ export function createBoxCorruption(renderer: THREE.WebGLRenderer) {
   const uniforms: Record<string, THREE.IUniform> = {
     tScene: { value: colorTarget.texture }, tMask: { value: maskTarget.texture },
     tDepth: { value: maskTarget.depthTexture },
+    tDots: { value: colorTarget.texture }, uDotOpacity: { value: 0 },
     uClipToObject: { value: new THREE.Matrix4() }, uObjectToClip: { value: new THREE.Matrix4() },
     uObjectMin: { value: new THREE.Vector3() }, uObjectSize: { value: new THREE.Vector3(1, 1, 1) },
     uResolution: { value: size }, uPointer: { value: new THREE.Vector2() },
     uSquareSize: { value: new THREE.Vector2(300, 300) },
     uPixelRatio: { value: renderer.getPixelRatio() }, uTime: { value: 0 },
   }
-  const keys = ['hatchStrength', 'hatchDensity', 'hatchWidth', 'scanlineStrength', 'scannerSweepStrength', 'scannerSpeed',
+  const keys = ['ledEnabled', 'ledStrength', 'ledPixelSize', 'ledGap', 'ledBlur', 'ledRgbMode', 'hatchStrength', 'hatchDensity', 'hatchWidth', 'scanlineStrength', 'scannerSweepStrength', 'scannerSpeed',
     'bandCoverage', 'bandOffsetStrength', 'tearAmount',
     'rgbSplitAmount', 'noiseAmount', 'blendAmount', 'colorStrength', 'colorDensity',
     'colorMotionSpeed', 'colorMotionTravel', 'colorMovingDensity'] as const
@@ -322,7 +353,7 @@ export function createBoxCorruption(renderer: THREE.WebGLRenderer) {
     if (!reducedMotion.matches) signalTime += dt * params.animationSpeed
     // Direct rendering retains the original antialiased outline and background.
     renderer.render(scene, camera)
-    if (!params.enabled || params.blendAmount <= 0 || !subject || !pointerActive) return
+    if (!params.enabled || (params.blendAmount <= 0 && uniforms.uDotOpacity.value <= 0) || !subject || !pointerActive) return
     subject.updateWorldMatrix(true, false)
     uniforms.uObjectToClip.value.copy(camera.projectionMatrix)
       .multiply(camera.matrixWorldInverse).multiply(subject.matrixWorld)
@@ -378,7 +409,11 @@ export function createBoxCorruption(renderer: THREE.WebGLRenderer) {
       renderer.setScissorTest(scissorTest)
     }
   }
-  return { params, setPointer, clearPointer, setSubject, resize, render, dispose: () => {
+  const setDots = (texture: THREE.Texture, opacity: number) => {
+    uniforms.tDots.value = texture
+    uniforms.uDotOpacity.value = THREE.MathUtils.clamp(opacity, 0, 1)
+  }
+  return { params, setDots, setPointer, clearPointer, setSubject, resize, render, dispose: () => {
     clearMasks(); colorTarget.dispose(); maskTarget.dispose(); material.dispose(); quad.dispose()
   } }
 }

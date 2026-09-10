@@ -157,7 +157,8 @@ for (const ratio of [1, 1.5, 2]) {
 assert.equal(DEFAULT_LENS.enabled, false)
 assert.equal(DEFAULT_CRT.enabled, false)
 const app = readFileSync(new URL('../src/viewer/app.ts', import.meta.url), 'utf8')
-assert.ok(!app.includes('createTechnicalLens(') && !app.includes('createAnalogCRT('), 'old passes are absent from the active render path')
+assert.ok(app.includes('dots.render(scene, camera, elapsed, true)'), 'original dots use capture-only mode for layering')
+assert.ok(!app.includes('createAnalogCRT('), 'analog CRT stays archived')
 const gui = readFileSync(new URL('../src/viewer/debug.ts', import.meta.url), 'utf8')
 assert.ok(!gui.includes('Scan Lens') && !gui.includes('Analog CRT'), 'old GUI controls remain hidden')
 
