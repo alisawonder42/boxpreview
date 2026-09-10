@@ -68,21 +68,16 @@ float boxSurface(vec2 uv, vec3 normal) {
   vec3 other = normalize(texture2D(tMask, clamp(uv, 0.0, 1.0)).rgb * 2.0 - 1.0);
   return boxMask(uv) * step(0.8, dot(normal, other));
 }
-// Protect the destination rim AND reject sources at or beyond the silhouette.
-// The original base is already on screen; discarded pixels are never rewritten.
+// Source filtering safety only. Surface creases are not holes in the object.
+// Check the bilinear color footprint so resampling cannot pull in background.
 float boxInterior(vec2 uv) {
-  vec2 d = vec2(2.5 * uPixelRatio) / uResolution;
-  vec3 normal = normalize(texture2D(tMask, uv).rgb * 2.0 - 1.0);
-  float m = boxMask(uv);
-  if (m < 0.999) return 0.0;
-  m = min(m, boxSurface(uv + vec2(d.x, 0.0), normal));
-  m = min(m, boxSurface(uv - vec2(d.x, 0.0), normal));
-  m = min(m, boxSurface(uv + vec2(0.0, d.y), normal));
-  m = min(m, boxSurface(uv - vec2(0.0, d.y), normal));
-  m = min(m, boxSurface(uv + d, normal));
-  m = min(m, boxSurface(uv - d, normal));
-  m = min(m, boxSurface(uv + vec2(d.x, -d.y), normal));
-  m = min(m, boxSurface(uv + vec2(-d.x, d.y), normal));
+  vec2 pixel = uv * uResolution - 0.5;
+  vec2 lower = (floor(pixel) + 0.5) / uResolution;
+  vec2 upper = lower + 1.0 / uResolution;
+  float m = boxMask(lower);
+  m = min(m, boxMask(vec2(upper.x, lower.y)));
+  m = min(m, boxMask(vec2(lower.x, upper.y)));
+  m = min(m, boxMask(upper));
   return step(0.999, m);
 }
 vec3 boxRead(vec2 uv, vec3 original) {
@@ -132,7 +127,7 @@ void main() {
     * step(0.0, local.y) * step(local.y, 1.0);
   float objectMask = boxMask(vUv);
   float finalMask = cursorSquareMask * objectMask;
-  if (finalMask < 0.999 || boxInterior(vUv) < 0.5 || (uBlendAmount <= 0.0 && uDotOpacity <= 0.0)) discard;
+  if (finalMask < 0.999 || (uBlendAmount <= 0.0 && uDotOpacity <= 0.0)) discard;
   // Inverse normal-directed reprojection: only the treatment moves above the base.
   // A screen-space approximation to a thin lifted shell, measured in CSS pixels.
   vec2 effectUv = vUv;

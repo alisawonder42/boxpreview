@@ -121,3 +121,13 @@ a thin hovering layer; this is not a separate displaced mesh or a physically
 accurate shell. Sources across the silhouette or sharp creases are rejected.
 Zero restores contact with the surface; front-facing regions have little lateral
 shift. The mask uses geometry normals, not an invented normal map.
+
+### Continuous edge coverage
+
+Destination coverage uses the fixed cursor/object mask without normal-based erosion.
+Internal creases and the lid seam are eligible for the effect, including when a
+normal-directed offset is unsafe. In that case source sampling falls back to the
+unshifted surface instead of discarding the destination. Resampled color checks
+the four texels in its bilinear footprint to prevent background bleed. The outer
+object silhouette still clips the effect. This supersedes earlier descriptions
+of a protected destination rim or masked-out crease strip.
