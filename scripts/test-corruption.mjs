@@ -97,7 +97,7 @@ for (const ratio of [1, 1.5, 2]) {
   assert.equal(uniforms.tMask.value, calls[2].target.texture)
   assert.deepEqual(uniforms.uResolution.value.toArray(), [800 * ratio, 600 * ratio])
   assert.deepEqual(uniforms.uPointer.value.toArray(), [400 * ratio, 300 * ratio])
-  assert.deepEqual(uniforms.uSquareSize.value.toArray(), [300 * ratio, 300 * ratio])
+  assert.deepEqual(uniforms.uSquareSize.value.toArray(), [100 * ratio, 100 * ratio])
   // The same local surface point reconstructs identically after orbit and root rotation.
   const point = new THREE.Vector3(0.15, 0.2, 0.5)
   for (const angle of [0, 0.6, 1.2]) {
