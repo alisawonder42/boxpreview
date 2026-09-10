@@ -121,3 +121,24 @@ a thin hovering layer; this is not a separate displaced mesh or a physically
 accurate shell. Sources across the silhouette or sharp creases are rejected.
 Zero restores contact with the surface; front-facing regions have little lateral
 shift. The mask uses geometry normals, not an invented normal map.
+
+### Continuous edge coverage
+
+Destination coverage uses the fixed cursor/object mask without normal-based erosion.
+Internal creases and the lid seam are eligible for the effect, including when a
+normal-directed offset is unsafe. In that case source sampling falls back to the
+unshifted surface instead of discarding the destination. Resampled color checks
+the four texels in its bilinear footprint to prevent background bleed. The outer
+object silhouette still clips the effect. This supersedes earlier descriptions
+of a protected destination rim or masked-out crease strip.
+
+### Screenshot preset and edge clarity
+
+Defaults now match the visible settings in the two September 10 screenshots,
+including surface distance 10, overall opacity 0.56, LED 0.91, and dot layer enabled
+at opacity 0.27, density 0.52 and intensity 1.45. Hidden palette values are retained.
+A narrow geometry-normal/silhouette contour enhances the lid seam and face edges
+after layer blending, inside the original cursor/object mask. Surface edges in
+debug exposes highlight strength (0.5 default) and width (1.5 CSS pixels default).
+This is an interior highlight, with no outward expansion, bloom or mesh movement.
+This preset supersedes the earlier default values documented above.

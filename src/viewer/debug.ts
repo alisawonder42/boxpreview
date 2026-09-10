@@ -24,7 +24,7 @@ export const DEFAULT_LIGHT: LightLook = {
   azimuth: -53,
   elevation: 42,
   distance: 5.4,
-  softness: 8,
+  softness: 11,
   deskSize: 5,
   floor: '#e4dfd4',
   deskGrain: 0.04,
@@ -77,6 +77,9 @@ export function attachDebugMenu(options: DebugOptions) {
     folder.add(corruption, 'squareSize', 80, 500, 1).name('cursor square · px')
     folder.add(corruption, 'surfaceDistance', 0, 12, 0.1).name('Surface distance · px')
     folder.add(corruption, 'blendAmount', 0, 1, 0.01).name('overall effect opacity')
+    const edges = folder.addFolder('Surface edges')
+    edges.add(corruption, 'edgeStrength', 0, 1, 0.01).name('edge highlight')
+    edges.add(corruption, 'edgeWidth', 0.5, 4, 0.1).name('edge width · px')
     const hatch = folder.addFolder('Print shading')
     hatch.add(corruption, 'hatchStrength', 0, 1, 0.01).name('hatch strength')
     hatch.add(corruption, 'hatchDensity', 20, 180, 1).name('hatch density')

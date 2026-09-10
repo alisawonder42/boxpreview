@@ -2,14 +2,16 @@ import * as THREE from 'three'
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js'
 
 export const DEFAULT_CORRUPTION = {
-  enabled: true, squareSize: 300, surfaceDistance: 2, colorStrength: 0.35, colorDensity: 0.25,
-  colorMotionSpeed: 0.55, colorMotionTravel: 14, colorMovingDensity: 0.7,
-  ledEnabled: true, ledStrength: 0.45, ledPixelSize: 7.62, ledGap: 0, ledBlur: 0.08, ledRgbMode: true,
-  hatchStrength: 0.65, hatchDensity: 90, hatchWidth: 0.12,
-  scanlineStrength: 0.12, scannerSweepStrength: 0.08, scannerSpeed: 0.25, bandCoverage: 0.16,
-  bandOffsetStrength: 6, tearAmount: 0.15, rgbSplitAmount: 0.35,
-  noiseAmount: 0, blendAmount: 0.25, animationSpeed: 1,
+  enabled: true, squareSize: 300, surfaceDistance: 10, colorStrength: 0.97, colorDensity: 0.31,
+  colorMotionSpeed: 1.55, colorMotionTravel: 53, colorMovingDensity: 0.7,
+  ledEnabled: true, ledStrength: 0.91, ledPixelSize: 11.09, ledGap: 0.48, ledBlur: 0.08, ledRgbMode: true,
+  hatchStrength: 0.69, hatchDensity: 164, hatchWidth: 0.17,
+  scanlineStrength: 0.44, scannerSweepStrength: 0.33, scannerSpeed: 1.59, bandCoverage: 0.24,
+  bandOffsetStrength: 6, tearAmount: 0.45, rgbSplitAmount: 2.6,
+  noiseAmount: 0, blendAmount: 0.56, animationSpeed: 1.6,
+  edgeStrength: 0.5, edgeWidth: 1.5,
 }
+
 export type CorruptionParams = typeof DEFAULT_CORRUPTION
 
 const VERTEX = /* glsl */ `
@@ -48,6 +50,8 @@ uniform float uTearAmount;
 uniform float uRgbSplitAmount;
 uniform float uNoiseAmount;
 uniform float uBlendAmount;
+uniform float uEdgeStrength;
+uniform float uEdgeWidth;
 uniform float uSurfaceDistance;
 uniform bool uLedEnabled;
 uniform bool uLedRgbMode;
@@ -68,22 +72,31 @@ float boxSurface(vec2 uv, vec3 normal) {
   vec3 other = normalize(texture2D(tMask, clamp(uv, 0.0, 1.0)).rgb * 2.0 - 1.0);
   return boxMask(uv) * step(0.8, dot(normal, other));
 }
-// Protect the destination rim AND reject sources at or beyond the silhouette.
-// The original base is already on screen; discarded pixels are never rewritten.
+// Source filtering safety only. Surface creases are not holes in the object.
+// Check the bilinear color footprint so resampling cannot pull in background.
 float boxInterior(vec2 uv) {
-  vec2 d = vec2(2.5 * uPixelRatio) / uResolution;
-  vec3 normal = normalize(texture2D(tMask, uv).rgb * 2.0 - 1.0);
-  float m = boxMask(uv);
-  if (m < 0.999) return 0.0;
-  m = min(m, boxSurface(uv + vec2(d.x, 0.0), normal));
-  m = min(m, boxSurface(uv - vec2(d.x, 0.0), normal));
-  m = min(m, boxSurface(uv + vec2(0.0, d.y), normal));
-  m = min(m, boxSurface(uv - vec2(0.0, d.y), normal));
-  m = min(m, boxSurface(uv + d, normal));
-  m = min(m, boxSurface(uv - d, normal));
-  m = min(m, boxSurface(uv + vec2(d.x, -d.y), normal));
-  m = min(m, boxSurface(uv + vec2(-d.x, d.y), normal));
+  vec2 pixel = uv * uResolution - 0.5;
+  vec2 lower = (floor(pixel) + 0.5) / uResolution;
+  vec2 upper = lower + 1.0 / uResolution;
+  float m = boxMask(lower);
+  m = min(m, boxMask(vec2(upper.x, lower.y)));
+  m = min(m, boxMask(vec2(lower.x, upper.y)));
+  m = min(m, boxMask(upper));
   return step(0.999, m);
+}
+// Geometry edges only: the printed albedo never becomes a false contour.
+float edgeDifference(vec2 uv, vec3 normal) {
+  if (boxMask(uv) < 0.5) return 1.0;
+  vec3 neighbor = normalize(texture2D(tMask, uv).rgb * 2.0 - 1.0);
+  return smoothstep(0.08, 0.32, 1.0 - dot(normal, neighbor));
+}
+float boxContour(vec2 uv) {
+  vec3 normal = normalize(texture2D(tMask, uv).rgb * 2.0 - 1.0);
+  vec2 d = uEdgeWidth * uPixelRatio / uResolution;
+  float edge = max(edgeDifference(uv + vec2(d.x, 0.0), normal), edgeDifference(uv - vec2(d.x, 0.0), normal));
+  edge = max(edge, max(edgeDifference(uv + vec2(0.0, d.y), normal), edgeDifference(uv - vec2(0.0, d.y), normal)));
+  edge = max(edge, max(edgeDifference(uv + d * 0.7071, normal), edgeDifference(uv - d * 0.7071, normal)));
+  return edge;
 }
 vec3 boxRead(vec2 uv, vec3 original) {
   vec3 normal = normalize(texture2D(tMask, vUv).rgb * 2.0 - 1.0);
@@ -132,7 +145,7 @@ void main() {
     * step(0.0, local.y) * step(local.y, 1.0);
   float objectMask = boxMask(vUv);
   float finalMask = cursorSquareMask * objectMask;
-  if (finalMask < 0.999 || boxInterior(vUv) < 0.5 || (uBlendAmount <= 0.0 && uDotOpacity <= 0.0)) discard;
+  if (finalMask < 0.999 || (uBlendAmount <= 0.0 && uDotOpacity <= 0.0)) discard;
   // Inverse normal-directed reprojection: only the treatment moves above the base.
   // A screen-space approximation to a thin lifted shell, measured in CSS pixels.
   vec2 effectUv = vUv;
@@ -254,6 +267,8 @@ void main() {
   }
   vec3 layered = mix(original, treated, uBlendAmount);
   if (uDotOpacity > 0.0) layered = mix(layered, texture2D(tDots, effectUv).rgb, uDotOpacity);
+  float contour = boxContour(vUv) * uEdgeStrength * max(uBlendAmount, uDotOpacity);
+  layered = mix(layered, max(layered, vec3(0.58, 0.72, 0.65)), contour);
   gl_FragColor = vec4(mix(original, layered, finalMask), 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -286,7 +301,7 @@ export function createBoxCorruption(renderer: THREE.WebGLRenderer) {
     uSquareSize: { value: new THREE.Vector2(300, 300) },
     uPixelRatio: { value: renderer.getPixelRatio() }, uTime: { value: 0 },
   }
-  const keys = ['surfaceDistance', 'ledEnabled', 'ledStrength', 'ledPixelSize', 'ledGap', 'ledBlur', 'ledRgbMode', 'hatchStrength', 'hatchDensity', 'hatchWidth', 'scanlineStrength', 'scannerSweepStrength', 'scannerSpeed',
+  const keys = ['edgeStrength', 'edgeWidth', 'surfaceDistance', 'ledEnabled', 'ledStrength', 'ledPixelSize', 'ledGap', 'ledBlur', 'ledRgbMode', 'hatchStrength', 'hatchDensity', 'hatchWidth', 'scanlineStrength', 'scannerSweepStrength', 'scannerSpeed',
     'bandCoverage', 'bandOffsetStrength', 'tearAmount',
     'rgbSplitAmount', 'noiseAmount', 'blendAmount', 'colorStrength', 'colorDensity',
     'colorMotionSpeed', 'colorMotionTravel', 'colorMovingDensity'] as const
