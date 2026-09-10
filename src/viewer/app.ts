@@ -100,7 +100,12 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   // Original dot scanner is an optional captured layer; analog CRT stays archived.
   const dots = createTechnicalLens(renderer)
   dots.params.borderOpacity = 0
-  dots.params.effectOpacity = 0.35
+  Object.assign(dots.params, {
+    enabled: true, effectOpacity: 0.27, cellSize: 4.4, pointDensity: 0.52,
+    pointSize: 1.4, effectIntensity: 1.45, flicker: 0.64, edgeBoost: 1.39,
+    scanlines: 0.77, glitchAmount: 0.28, animSpeed: 2, rowFlowEnabled: false,
+    rowSpeed: 0, rowDirection: 1, symbols: '1', symbolDensity: 0.03, symbolSize: 0.55,
+  })
   dots.setSubject(subject)
   const corruption = createBoxCorruption(renderer)
   corruption.setSubject(subject)
