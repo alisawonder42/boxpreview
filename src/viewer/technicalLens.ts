@@ -525,10 +525,10 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
     syncSize()
   }
 
-  const render = (scene: THREE.Scene, camera: THREE.Camera, elapsed: number) => {
+  const render = (scene: THREE.Scene, camera: THREE.Camera, elapsed: number, captureOnly = false) => {
     // Keep the base view independent of the lens's offscreen passes.
     const previousTarget = renderer.getRenderTarget()
-    renderer.render(scene, camera)
+    if (!captureOnly) renderer.render(scene, camera)
     const active = pointerActive && params.enabled
     if (!active || subjectMeshes.size === 0) {
       return
@@ -584,6 +584,8 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
       renderer.setScissorTest(previousScissorTest)
     }
 
+    if (captureOnly) return
+
     // Scissor uses renderer pixels (before pixel ratio); uniforms use drawing
     // buffer pixels. Never clear or overwrite the scene outside this rectangle,
     // even if the composite shader cannot compile on a particular driver.
@@ -629,5 +631,5 @@ export function createTechnicalLens(renderer: THREE.WebGLRenderer) {
       originalTexture: sceneTarget.texture, opacity: params.effectOpacity,
       active: pointerActive && params.enabled && subjectMeshes.size > 0 }
   }
-  return { params, render, setPointer, setPointerActive, setSubject, resize, dispose, getWindow }
+  return { params, render, getLayerTexture: () => effectTarget.texture, setPointer, setPointerActive, setSubject, resize, dispose, getWindow }
 }

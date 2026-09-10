@@ -155,3 +155,16 @@ for (const ratio of [1, 1.5, 2]) {
   lens.dispose()
 }
 console.log('Lens and final-frame CRT regression checks passed.')
+
+for (const ratio of [1, 2]) {
+  const { renderer, lens, scene, calls } = setup(ratio)
+  lens.setPointer(400, 300)
+  lens.setPointerActive(true)
+  lens.render(scene, new THREE.PerspectiveCamera(), 1, true)
+  assert.equal(calls.length, 3, 'capture mode renders only color, subject and dot textures')
+  assert.ok(calls.every(call => call.target !== null), 'capture mode never overwrites the screen')
+  assert.equal(lens.getLayerTexture(), calls[2].target.texture, 'compositor receives actual original shader output')
+  assert.equal(renderer.getRenderTarget(), null, 'capture restores caller target')
+  lens.dispose()
+}
+console.log('Original dot layer capture checks passed.')

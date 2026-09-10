@@ -71,8 +71,8 @@ size; **Print shading** controls hatch strength, density and ink width;
 controls color strength/density and sideways motion. The remaining controls tune
 corruption coverage, offsets, tears, RGB separation and optional noise (off).
 
-The original `technicalLens.ts` and `analogCRT.ts` implementations remain archived,
-disabled and hidden. The old scanner used geometry normals, a five-tone relief
+The original `technicalLens.ts` implementation is available as an optional layer;
+`analogCRT.ts` remains archived, disabled and hidden. The old scanner used geometry normals, a five-tone relief
 palette, points, broken green streaks and optional row cycling. It is separate
 from the currently active scanner lines and sweep.
 
@@ -88,3 +88,25 @@ node scripts/test-corruption.mjs /path/to/glslangValidator
 Logic tests cover render state, pixel-density scaling, stable surface coordinates,
 cursor independence, reduced motion and disabled bypass. GLSL compilation requires
 the external validator; real GPU visual review remains necessary.
+
+### LED screen layer
+
+Fine vertical RGB subpixel triplets modulate the original lit surface and follow
+its triplanar coordinates, clipped by the same cursor-square/object mask. They
+compose with the hatch and scanner before the final 25% overall blend. The LED
+screen folder exposes enable, strength, spacing (nominal 600-unit surface scale),
+gap, softness and RGB/monochrome mode. Derivative filtering fades unresolved
+stripes to prevent distant moire; no RGB bars are drawn on the background.
+
+### Original dot scanner layer
+
+Enable **Original dot scanner · layer** in debug to combine the original five-tone
+normal/relief scanner, dots and symbols with the print/scanner/LED treatment. It
+defaults off, with 35% layer opacity when enabled. Dot opacity is independent of
+the main effect opacity; at 100% it covers the underlying treatment. Grid spacing,
+density, size, intensity, flicker, relief, scanlines, broken streaks, animation, row
+cycling, symbols and the five palette colors are editable. The square size is
+shared. Capture-only rendering feeds its real output into the final compositor,
+which applies the same visible-object mask and protected silhouette. The original
+dot grid retains its screen-space construction. Bloom and grain are not included
+in this captured layer. The main effect enable is the master toggle.

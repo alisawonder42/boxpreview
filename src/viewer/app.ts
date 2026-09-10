@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 import { attachDebugMenu, DEFAULT_LIGHT, type LightLook } from './debug'
 import { createBoxCorruption } from './boxCorruption'
+import { createTechnicalLens } from './technicalLens'
 import {
   createGround,
   findBundledScan,
@@ -96,7 +97,11 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   }
   applyLook()
 
-  // Legacy technicalLens/analogCRT remain available in their modules, but are not active.
+  // Original dot scanner is an optional captured layer; analog CRT stays archived.
+  const dots = createTechnicalLens(renderer)
+  dots.params.borderOpacity = 0
+  dots.params.effectOpacity = 0.35
+  dots.setSubject(subject)
   const corruption = createBoxCorruption(renderer)
   corruption.setSubject(subject)
   const clock = new THREE.Clock()
@@ -124,15 +129,18 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     subject = next
     scene.add(subject)
     corruption.setSubject(subject)
+    dots.setSubject(subject)
     fitDesk(desk, subject, look.deskSize)
     setSource(label)
   }
 
-  attachDebugMenu({ look, onLook: applyLook, corruption: corruption.params })
+  attachDebugMenu({ look, onLook: applyLook, corruption: corruption.params, dots: dots.params })
 
   const hideHint = () => hintWrap?.classList.add('is-hidden')
 
   const onPointerMove = (event: PointerEvent) => {
+    dots.setPointer(event.clientX, event.clientY)
+    dots.setPointerActive(true)
     corruption.setPointer(event.clientX, event.clientY)
     pointerPixels.set(event.clientX, event.clientY)
     pointerNDC.set(
@@ -142,9 +150,10 @@ export async function startViewer(canvas: HTMLCanvasElement) {
   }
   canvas.addEventListener('pointermove', onPointerMove)
   canvas.addEventListener('pointerdown', onPointerMove)
-  canvas.addEventListener('pointerleave', corruption.clearPointer)
-  canvas.addEventListener('pointercancel', corruption.clearPointer)
-  window.addEventListener('blur', corruption.clearPointer)
+  const clearPointer = () => { corruption.clearPointer(); dots.setPointerActive(false) }
+  canvas.addEventListener('pointerleave', clearPointer)
+  canvas.addEventListener('pointercancel', clearPointer)
+  window.addEventListener('blur', clearPointer)
   canvas.addEventListener('pointerdown', hideHint)
 
   reset?.addEventListener('click', () => {
@@ -187,6 +196,7 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     camera.updateProjectionMatrix()
     renderer.setSize(w, h)
     corruption.resize()
+    dots.resize()
   })
 
   const loop = () => {
@@ -195,6 +205,10 @@ export async function startViewer(canvas: HTMLCanvasElement) {
     canvas.dataset.pointer = `${pointerNDC.x.toFixed(3)},${pointerNDC.y.toFixed(3)}`
     canvas.dataset.pointerPx = `${pointerPixels.x.toFixed(0)},${pointerPixels.y.toFixed(0)}`
     const elapsed = clock.getElapsedTime()
+    dots.params.lensSize = corruption.params.squareSize
+    const dotOpacity = dots.params.enabled ? dots.params.effectOpacity : 0
+    if (dotOpacity > 0) dots.render(scene, camera, elapsed, true)
+    corruption.setDots(dots.getLayerTexture(), dotOpacity)
     corruption.render(scene, camera, elapsed)
   }
   loop()

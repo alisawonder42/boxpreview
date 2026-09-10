@@ -1,4 +1,5 @@
 import GUI from 'lil-gui'
+import { type LensParams } from './technicalLens'
 import { DEFAULT_CORRUPTION, type CorruptionParams } from './boxCorruption'
 
 export type LightLook = {
@@ -33,6 +34,7 @@ type DebugOptions = {
   look: LightLook
   onLook?: () => void
   corruption?: CorruptionParams
+  dots?: LensParams
 }
 
 export function attachDebugMenu(options: DebugOptions) {
@@ -40,7 +42,7 @@ export function attachDebugMenu(options: DebugOptions) {
   const embed = document.body.classList.contains('embed')
   if (embed && params.get('debug') !== '1') return null
 
-  const { look, onLook, corruption } = options
+  const { look, onLook, corruption, dots } = options
   const gui = new GUI({ title: 'Look' })
   gui.domElement.classList.add('debug-gui')
   gui.domElement.style.right = '12px'
@@ -78,6 +80,13 @@ export function attachDebugMenu(options: DebugOptions) {
     hatch.add(corruption, 'hatchStrength', 0, 1, 0.01).name('hatch strength')
     hatch.add(corruption, 'hatchDensity', 20, 180, 1).name('hatch density')
     hatch.add(corruption, 'hatchWidth', 0.04, 0.3, 0.01).name('ink width')
+    const led = folder.addFolder('LED screen')
+    led.add(corruption, 'ledEnabled').name('enabled')
+    led.add(corruption, 'ledStrength', 0, 1, 0.01).name('LED strength')
+    led.add(corruption, 'ledPixelSize', 2, 24, 0.01).name('subpixel spacing')
+    led.add(corruption, 'ledGap', 0, 0.7, 0.01).name('gap')
+    led.add(corruption, 'ledBlur', 0, 1, 0.01).name('pixel softness')
+    led.add(corruption, 'ledRgbMode').name('RGB mode')
     const scanner = folder.addFolder('Scanner')
     scanner.add(corruption, 'scanlineStrength', 0, 0.5, 0.01).name('fine lines')
     scanner.add(corruption, 'scannerSweepStrength', 0, 0.6, 0.01).name('moving scanner')
@@ -99,6 +108,30 @@ export function attachDebugMenu(options: DebugOptions) {
       folder.controllersRecursive().forEach(control => control.updateDisplay())
     } }, 'reset').name('Reset corruption')
     folder.open()
+  }
+  if (dots) {
+    const folder = gui.addFolder('Original dot scanner · layer')
+    folder.add(dots, 'enabled')
+    folder.add(dots, 'effectOpacity', 0, 1, 0.01).name('dot layer opacity')
+    folder.add(dots, 'cellSize', 2.5, 12, 0.1).name('grid spacing')
+    folder.add(dots, 'pointDensity', 0, 1, 0.01).name('dot density')
+    folder.add(dots, 'pointSize', 0.4, 3.5, 0.05).name('dot size')
+    folder.add(dots, 'effectIntensity', 0, 2, 0.01).name('intensity')
+    folder.add(dots, 'flicker', 0, 1, 0.01)
+    folder.add(dots, 'edgeBoost', 0, 3, 0.01).name('relief detail')
+    folder.add(dots, 'scanlines', 0, 1, 0.01)
+    folder.add(dots, 'glitchAmount', 0, 1, 0.01).name('broken streaks')
+    folder.add(dots, 'animSpeed', 0, 3, 0.01).name('animation speed')
+    folder.add(dots, 'rowFlowEnabled').name('row cycling')
+    folder.add(dots, 'rowSpeed', 0, 20, 0.1).name('row speed')
+    folder.add(dots, 'rowDirection', { Down: 1, Up: -1 }).name('row direction')
+    folder.add(dots, 'symbols').name('symbols')
+    folder.add(dots, 'symbolDensity', 0, 1, 0.01).name('symbol fraction')
+    folder.add(dots, 'symbolSize', 0.4, 1, 0.01).name('symbol size')
+    const palette = folder.addFolder('Five-tone palette')
+    for (const [key, label] of [['shadowGreen', 'shadow'], ['midGreen', 'base'],
+      ['highlightGreen', 'highlight 1'], ['highlightGold', 'highlight 2'],
+      ['highlightWhite', 'highlight 3']] as const) palette.addColor(dots, key).name(label)
   }
   return gui
 }
